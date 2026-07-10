@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import type { Profile, UserRole } from '../types';
 
 type AuthContextValue = {
@@ -24,7 +24,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const loadUserData = useCallback(async (currentSession: Session | null) => {
-    if (!currentSession?.user) {
+    if (!isSupabaseConfigured || !currentSession?.user) {
       setProfile(null);
       setRole(null);
       return;
@@ -42,6 +42,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshAuthState = useCallback(async () => {
     setLoading(true);
+
+    if (!isSupabaseConfigured) {
+      setSession(null);
+      setProfile(null);
+      setRole(null);
+      setLoading(false);
+      return;
+    }
+
     const { data } = await supabase.auth.getSession();
     setSession(data.session);
     await loadUserData(data.session);
@@ -49,6 +58,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [loadUserData]);
 
   useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setLoading(false);
+      return;
+    }
+
     refreshAuthState();
 
     const { data: listener } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
@@ -60,7 +74,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [loadUserData, refreshAuthState]);
 
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
+    if (isSupabaseConfigured) {
+      await supabase.auth.signOut();
+    }
     setSession(null);
     setProfile(null);
     setRole(null);
