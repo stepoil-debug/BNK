@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { getDeviceFingerprint } from '../lib/device';
+import { useAuth } from '../context/AuthContext';
+import type { ApprovedDevice } from '../types';
 
 type GateStatus = 'checking' | 'allowed';
 
-const freePaths = ['/security/device-check'];
+const setupPaths = ['/security/setup', '/security/device-check'];
 
 export function ProtectedRoute() {
   const { session, loading, role } = useAuth();
@@ -15,63 +16,55 @@ export function ProtectedRoute() {
   const [gate, setGate] = useState<GateStatus>('checking');
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function validateDevice() {
-      if (loading) return;
-
-      if (!session?.access_token) {
-        if (!cancelled) setGate('allowed');
-        return;
-      }
+    async function runGate() {
+      if (loading || !session?.user) return;
+      setGate('checking');
 
       if (role === 'blocked') {
         navigate('/blocked', { replace: true });
         return;
       }
 
-      if (freePaths.includes(location.pathname)) {
-        if (!cancelled) setGate('allowed');
-        return;
-      }
+      const isSecuritySetupPath = setupPaths.includes(location.pathname);
 
-      if (!cancelled) setGate('checking');
-
-      try {
-        const fingerprint = await getDeviceFingerprint();
-        const { data, error } = await supabase.rpc('local_get_my_device_status', {
-          p_session_token: session.access_token,
-          p_fingerprint_hash: fingerprint.fingerprint_hash
-        });
-
-        if (error) throw error;
-
-        const row = Array.isArray(data) ? data[0] : data;
-        const status = row?.device_status;
-
-        if (status !== 'approved') {
-          navigate('/security/device-check', { replace: true });
+      if (location.pathname !== '/security/setup') {
+        const { data: factors } = await supabase.auth.mfa.listFactors();
+        const hasVerifiedTotp = Boolean(factors?.totp?.some((factor) => factor.status === 'verified'));
+        if (!hasVerifiedTotp) {
+          navigate('/security/setup', { replace: true });
           return;
         }
 
-        if (!cancelled) setGate('allowed');
-      } catch (error) {
-        console.error('Falha ao validar dispositivo:', error);
-        navigate('/security/device-check', { replace: true });
+        const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (aal?.currentLevel !== 'aal2') {
+          navigate('/login', { replace: true, state: { from: location } });
+          return;
+        }
       }
+
+      if (!isSecuritySetupPath) {
+        const fingerprint = await getDeviceFingerprint();
+        const { data: device } = await supabase
+          .from('approved_devices')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .eq('fingerprint_hash', fingerprint.fingerprint_hash)
+          .maybeSingle<ApprovedDevice>();
+
+        if (!device || device.status !== 'approved') {
+          navigate('/security/device-check', { replace: true });
+          return;
+        }
+      }
+
+      setGate('allowed');
     }
+    void runGate();
+  }, [loading, session, role, location, navigate]);
 
-    void validateDevice();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [loading, session, role, location.pathname, navigate]);
-
-  if (loading) return <div className="page-loader">Validando sessão local...</div>;
+  if (loading || gate === 'checking') return <div className="page-loader">Validando camadas de segurança...</div>;
   if (!session) return <Navigate to="/login" replace state={{ from: location }} />;
   if (role === 'blocked') return <Navigate to="/blocked" replace />;
-  if (gate === 'checking') return <div className="page-loader">Validando dispositivo autorizado...</div>;
 
   return <Outlet />;
 }
