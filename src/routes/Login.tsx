@@ -140,7 +140,6 @@ export function Login() {
             <span className="secure-status-pill">
               <Shield size={15} /> Acesso restrito
             </span>
-            <span className="secure-env-pill">Supabase isolado</span>
           </div>
 
           {!mfa ? (
