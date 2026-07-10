@@ -24,5 +24,9 @@
     "@vitejs/plugin-react": "latest",
     "typescript": "latest",
     "vite": "latest"
+  },
+  "engines": {
+    "node": "22.x",
+    "npm": "10.x"
   }
 }
