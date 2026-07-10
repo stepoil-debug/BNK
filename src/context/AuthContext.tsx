@@ -1,43 +1,62 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import type { Session, User } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import type { Profile, UserRole } from '../types';
 
+type LocalUser = {
+  id: string;
+  email: string;
+  full_name: string | null;
+};
+
 type AuthContextValue = {
-  session: Session | null;
-  user: User | null;
+  session: { access_token: string } | null;
+  user: LocalUser | null;
   profile: Profile | null;
   role: UserRole | null;
   loading: boolean;
   isAdmin: boolean;
   canEditFinance: boolean;
+  login: (email: string, password: string, device: unknown) => Promise<{ device_status: string }>;
   refreshAuthState: () => Promise<void>;
   signOut: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+const TOKEN_KEY = 'step_bnk_local_session_token';
+
+function normalizeRole(role: string | null | undefined): UserRole | null {
+  if (!role) return null;
+  return role as UserRole;
+}
+
+export function getLocalSessionToken() {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<{ access_token: string } | null>(null);
+  const [user, setUser] = useState<LocalUser | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadUserData = useCallback(async (currentSession: Session | null) => {
-    if (!isSupabaseConfigured || !currentSession?.user) {
-      setProfile(null);
-      setRole(null);
-      return;
-    }
+  const applySession = useCallback((token: string, payload: any) => {
+    const nextUser = {
+      id: payload.user_id,
+      email: payload.email,
+      full_name: payload.full_name ?? null
+    };
 
-    const userId = currentSession.user.id;
-    const [{ data: profileData }, { data: roleData }] = await Promise.all([
-      supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
-      supabase.from('user_roles').select('role').eq('user_id', userId).maybeSingle()
-    ]);
-
-    setProfile((profileData as Profile | null) ?? null);
-    setRole((roleData?.role as UserRole | undefined) ?? null);
+    setSession({ access_token: token });
+    setUser(nextUser);
+    setProfile({
+      id: payload.user_id,
+      email: payload.email,
+      full_name: payload.full_name ?? null,
+      status: payload.status ?? 'active'
+    } as Profile);
+    setRole(normalizeRole(payload.role));
   }, []);
 
   const refreshAuthState = useCallback(async () => {
@@ -45,39 +64,70 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (!isSupabaseConfigured) {
       setSession(null);
+      setUser(null);
       setProfile(null);
       setRole(null);
       setLoading(false);
       return;
     }
 
-    const { data } = await supabase.auth.getSession();
-    setSession(data.session);
-    await loadUserData(data.session);
-    setLoading(false);
-  }, [loadUserData]);
-
-  useEffect(() => {
-    if (!isSupabaseConfigured) {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) {
+      setSession(null);
+      setUser(null);
+      setProfile(null);
+      setRole(null);
       setLoading(false);
       return;
     }
 
-    refreshAuthState();
+    const { data, error } = await supabase.rpc('local_current_user', { p_session_token: token });
+    const currentUser = Array.isArray(data) ? data[0] : data;
 
-    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
-      setSession(nextSession);
-      await loadUserData(nextSession);
+    if (error || !currentUser) {
+      localStorage.removeItem(TOKEN_KEY);
+      setSession(null);
+      setUser(null);
+      setProfile(null);
+      setRole(null);
+      setLoading(false);
+      return;
+    }
+
+    applySession(token, currentUser);
+    setLoading(false);
+  }, [applySession]);
+
+  useEffect(() => {
+    void refreshAuthState();
+  }, [refreshAuthState]);
+
+  const login = useCallback(async (email: string, password: string, device: unknown) => {
+    const { data, error } = await supabase.rpc('local_login', {
+      p_email: email,
+      p_password: password,
+      p_device: device
     });
 
-    return () => listener.subscription.unsubscribe();
-  }, [loadUserData, refreshAuthState]);
+    if (error) throw error;
+
+    const result = Array.isArray(data) ? data[0] : data;
+    if (!result?.session_token) throw new Error('Falha ao gerar sessão local.');
+
+    localStorage.setItem(TOKEN_KEY, result.session_token);
+    applySession(result.session_token, result);
+
+    return { device_status: result.device_status as string };
+  }, [applySession]);
 
   const signOut = useCallback(async () => {
-    if (isSupabaseConfigured) {
-      await supabase.auth.signOut();
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (token && isSupabaseConfigured) {
+      await supabase.rpc('local_logout', { p_session_token: token });
     }
+    localStorage.removeItem(TOKEN_KEY);
     setSession(null);
+    setUser(null);
     setProfile(null);
     setRole(null);
   }, []);
@@ -87,16 +137,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const canEditFinance = isAdmin || role === 'finance_editor';
     return {
       session,
-      user: session?.user ?? null,
+      user,
       profile,
       role,
       loading,
       isAdmin,
       canEditFinance,
+      login,
       refreshAuthState,
       signOut
     };
-  }, [session, profile, role, loading, refreshAuthState, signOut]);
+  }, [session, user, profile, role, loading, login, refreshAuthState, signOut]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
