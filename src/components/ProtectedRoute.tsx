@@ -38,7 +38,8 @@ export function ProtectedRoute() {
 
         const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
         if (aal?.currentLevel !== 'aal2') {
-          navigate('/login', { replace: true, state: { from: location } });
+          const returnTo = `${location.pathname}${location.search}`;
+          navigate(`/security/challenge?returnTo=${encodeURIComponent(returnTo)}`, { replace: true });
           return;
         }
       }
