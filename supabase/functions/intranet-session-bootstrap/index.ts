@@ -17,6 +17,11 @@ type ProfileRow = {
   status: string;
 };
 
+type IdentityLink = {
+  finance_user_id?: string;
+  status?: string;
+};
+
 const REQUIRED_PERMISSION = "financeiro:controle-bancario";
 const MAX_CLOCK_SKEW_MS = 60_000;
 const MAX_ASSERTION_LIFETIME_MS = 90_000;
@@ -122,7 +127,7 @@ Deno.serve(async (request: Request) => {
     return json({ code: "INVALID_ASSERTION", message: "Solicitação inválida." }, 400);
   }
 
-  const email = normalizeEmail(body.email);
+  const corporateEmail = normalizeEmail(body.email);
   const permission = String(body.permission ?? "");
   const issuedAt = Number(body.issued_at ?? 0);
   const expiresAt = Number(body.expires_at ?? 0);
@@ -130,7 +135,7 @@ Deno.serve(async (request: Request) => {
   const sessionId = String(body.session_id ?? "").trim();
   const now = Date.now();
 
-  if (!email || !email.includes("@") || permission !== REQUIRED_PERMISSION || nonce.length < 24) {
+  if (!corporateEmail || !corporateEmail.includes("@") || permission !== REQUIRED_PERMISSION || nonce.length < 24) {
     return json({ code: "INVALID_ASSERTION", message: "Solicitação corporativa inválida." }, 400);
   }
 
@@ -160,14 +165,14 @@ Deno.serve(async (request: Request) => {
     }
 
     const nonceHash = await sha256(nonce);
-    const emailHash = await sha256(email);
+    const corporateEmailHash = await sha256(corporateEmail);
     const sessionHash = sessionId ? await sha256(sessionId) : "";
     const { data: nonceAccepted, error: nonceError } = await admin.rpc(
       "consume_intranet_sso_nonce",
       {
         p_nonce_hash: nonceHash,
         p_session_hash: sessionHash,
-        p_email_hash: emailHash,
+        p_email_hash: corporateEmailHash,
         p_issued_at: new Date(issuedAt).toISOString(),
         p_expires_at: new Date(expiresAt).toISOString()
       }
@@ -175,25 +180,40 @@ Deno.serve(async (request: Request) => {
     if (nonceError) throw nonceError;
     if (nonceAccepted !== true) {
       await securityEvent(admin, "auth.intranet_sso_replay_blocked", "warning", null, {
-        email_hash: emailHash,
+        corporate_email_hash: corporateEmailHash,
         session_hash: sessionHash
       });
       return json({ code: "ASSERTION_REPLAYED", message: "Solicitação já utilizada." }, 409);
     }
 
-    const { data: profile, error: profileError } = await admin
+    const { data: identityData, error: identityError } = await admin.rpc(
+      "resolve_intranet_finance_identity",
+      { p_corporate_email: corporateEmail }
+    );
+    if (identityError) throw identityError;
+
+    const identityLink = (identityData ?? null) as IdentityLink | null;
+    if (identityLink?.status && identityLink.status !== "active") {
+      return json({ code: "FINANCE_USER_BLOCKED", message: "Vínculo corporativo bloqueado." }, 403);
+    }
+
+    let profileQuery = admin
       .from("profiles")
-      .select("id,email,full_name,status")
-      .ilike("email", email)
-      .maybeSingle<ProfileRow>();
+      .select("id,email,full_name,status");
+
+    profileQuery = identityLink?.finance_user_id
+      ? profileQuery.eq("id", identityLink.finance_user_id)
+      : profileQuery.ilike("email", corporateEmail);
+
+    const { data: profile, error: profileError } = await profileQuery.maybeSingle<ProfileRow>();
     if (profileError) throw profileError;
     if (!profile) {
-      return json({ code: "FINANCE_USER_NOT_PROVISIONED", message: "Usuário ainda não cadastrado no financeiro." }, 404);
+      return json({ code: "FINANCE_USER_NOT_PROVISIONED", message: "Usuário ainda não vinculado ao financeiro." }, 404);
     }
     if (profile.status !== "active") {
       await securityEvent(admin, "auth.intranet_sso_profile_blocked", "warning", profile.id, {
         status: profile.status,
-        email_hash: emailHash
+        corporate_email_hash: corporateEmailHash
       });
       return json({ code: "FINANCE_USER_BLOCKED", message: "Acesso financeiro bloqueado." }, 403);
     }
@@ -231,7 +251,9 @@ Deno.serve(async (request: Request) => {
     await securityEvent(admin, "auth.intranet_sso_bootstrap_issued", "success", profile.id, {
       role: roleRow.role,
       permission,
-      email_hash: emailHash,
+      corporate_email_hash: corporateEmailHash,
+      finance_email_hash: await sha256(profile.email.toLowerCase()),
+      used_identity_link: Boolean(identityLink?.finance_user_id),
       session_hash: sessionHash,
       assertion_expires_at: new Date(expiresAt).toISOString()
     });
