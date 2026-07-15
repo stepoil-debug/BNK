@@ -148,7 +148,7 @@ export function FinanceUsers() {
                       <td><span className={`status-dot ${user.biometric_status === 'active' ? 'approved' : 'pending'}`}>{user.biometric_status}</span></td>
                       <td>{user.last_access_at ? new Date(user.last_access_at).toLocaleString('pt-BR') : '-'}</td>
                       <td className="action-cell">
-                        {protectedRole ? <ShieldCheck size={19} title="Perfil protegido pela governança" /> : (
+                        {protectedRole ? <span title="Perfil protegido pela governança"><ShieldCheck size={19} aria-label="Perfil protegido" /></span> : (
                           <>
                             {user.status === 'blocked' ? <button className="icon-btn ok" title="Reativar" onClick={() => void changeStatus(user, user.biometric_status === 'active' ? 'active' : 'pending_face')}><RotateCcw size={18} /></button> : null}
                             {user.status !== 'blocked' && user.status !== 'revoked' ? <button className="icon-btn danger" title="Bloquear" onClick={() => void changeStatus(user, 'blocked')}><XCircle size={18} /></button> : null}
