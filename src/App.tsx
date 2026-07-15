@@ -11,6 +11,7 @@ import { History } from './routes/History';
 import { Imports } from './routes/Imports';
 import { IntranetAccess } from './routes/IntranetAccess';
 import { Login } from './routes/Login';
+import { MfaChallenge } from './routes/MfaChallenge';
 import { Reports } from './routes/Reports';
 import { SecurityAdmin } from './routes/SecurityAdmin';
 import { SecuritySetup } from './routes/SecuritySetup';
@@ -22,6 +23,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="/access" element={<IntranetAccess />} />
+      <Route path="/security/challenge" element={<MfaChallenge />} />
       <Route
         path="/login"
         element={standaloneLoginAllowed ? <Login /> : <Navigate to="/access" replace />}
