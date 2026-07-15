@@ -10,17 +10,43 @@ Não usar:
 - nova guia;
 - `iframe`;
 - segundo formulário de usuário e senha;
-- `SERVICE_ROLE_KEY` no frontend.
+- `SERVICE_ROLE_KEY` financeira na Intranet ou no frontend.
 
 ## Fronteiras
 
 | Camada | Responsabilidade |
 |---|---|
-| Intranet | Login corporativo, cookie de sessão, cards, permissão `financeiro:controle-bancario` e endpoint de bootstrap |
+| Intranet | Login corporativo, sessão, cards, permissão `financeiro:controle-bancario` e assinatura da asserção HMAC |
 | BNK frontend | Interface em `/financeiro/*`, troca do token temporário, MFA, dispositivo e telas financeiras |
-| Supabase financeiro | Auth financeiro, RLS, perfis, posições, dispositivos, eventos e auditoria |
+| Supabase financeiro | Validação da asserção, proteção contra replay, Auth financeiro, RLS, perfis, posições, dispositivos, eventos e auditoria |
 
-## Contrato do endpoint de bootstrap
+## Arquitetura de menor privilégio
+
+A Service Role do Supabase financeiro permanece exclusivamente dentro do projeto BNK. A Intranet conhece somente:
+
+- a URL pública do Supabase financeiro;
+- a chave publicável;
+- um segredo HMAC compartilhado entre servidores.
+
+```text
+Navegador
+  └── POST /api/finance/session/bootstrap
+          └── Netlify Function da Intranet
+                 ├── valida sessão corporativa
+                 ├── exige financeiro:controle-bancario
+                 ├── deriva e-mail da sessão
+                 ├── cria nonce + validade curta
+                 └── assina v1.<corpo JSON> com HMAC-SHA256
+                          └── Edge Function BNK intranet-session-bootstrap
+                                 ├── valida HMAC e prazo
+                                 ├── consome nonce de uso único
+                                 ├── valida profile/role/Auth
+                                 ├── registra auditoria
+                                 └── gera token_hash de magic link
+                                          └── frontend verifyOtp
+```
+
+## Contrato público para o frontend
 
 ### Requisição
 
@@ -28,7 +54,8 @@ Não usar:
 POST /api/finance/session/bootstrap
 Accept: application/json
 Content-Type: application/json
-Cookie: <sessão HttpOnly da Intranet>
+Cookie: <sessão da Intranet, quando aplicável>
+Authorization: Bearer <token da Intranet, quando aplicável>
 ```
 
 ```json
@@ -37,7 +64,7 @@ Cookie: <sessão HttpOnly da Intranet>
 }
 ```
 
-O frontend usa `credentials: include`. O endpoint não deve aceitar identidade, e-mail ou perfil enviados livremente pelo navegador. Esses dados precisam vir da sessão corporativa validada no servidor.
+O endpoint da Intranet não aceita e-mail, usuário, papel ou módulos enviados pelo navegador. A identidade é obtida exclusivamente da sessão corporativa validada.
 
 ### Resposta de sucesso
 
@@ -49,25 +76,12 @@ Content-Type: application/json
 
 ```json
 {
-  "token_hash": "TOKEN_TEMPORARIO_GERADO_PELO_SUPABASE"
+  "token_hash": "TOKEN_TEMPORARIO_GERADO_PELO_SUPABASE_BNK",
+  "expires_in": 60
 }
 ```
 
-O `token_hash` deve ser criado com o Admin API do Supabase financeiro:
-
-```js
-const { data, error } = await financeAdmin.auth.admin.generateLink({
-  type: 'magiclink',
-  email: corporateUser.email,
-  options: {
-    redirectTo: `${origin}/financeiro/access`
-  }
-});
-
-const tokenHash = data.properties.hashed_token;
-```
-
-O frontend usa esse valor somente uma vez:
+O frontend usa esse valor uma única vez:
 
 ```ts
 await supabase.auth.verifyOtp({
@@ -76,7 +90,54 @@ await supabase.auth.verifyOtp({
 });
 ```
 
-### Respostas de erro
+## Contrato servidor a servidor
+
+A Netlify Function da Intranet envia para:
+
+```text
+POST https://fowqidmmseynoneekrse.supabase.co/functions/v1/intranet-session-bootstrap
+```
+
+Cabeçalhos:
+
+```http
+Content-Type: application/json
+apikey: <FINANCE_SUPABASE_PUBLISHABLE_KEY>
+x-step-finance-signature: <HMAC_SHA256_HEX>
+```
+
+Corpo JSON serializado uma única vez:
+
+```json
+{
+  "email": "usuario@step-og.com",
+  "permission": "financeiro:controle-bancario",
+  "issued_at": 1784137000000,
+  "expires_at": 1784137090000,
+  "nonce": "valor-aleatorio-com-pelo-menos-24-caracteres",
+  "session_id": "identificador-da-sessao-corporativa"
+}
+```
+
+Assinatura:
+
+```text
+HMAC-SHA256(FINANCE_SSO_SHARED_SECRET, "v1." + corpo_json_exato)
+```
+
+Regras aplicadas pela Edge Function BNK:
+
+- tolerância máxima de relógio: 60 segundos;
+- validade máxima da asserção: 90 segundos;
+- permissão exata `financeiro:controle-bancario`;
+- nonce de uso único;
+- comparação de assinatura em tempo constante;
+- perfil financeiro previamente provisionado e ativo;
+- papel financeiro existente e diferente de `blocked`;
+- usuário correspondente no Supabase Auth;
+- auditoria dos sucessos, falhas de assinatura e tentativas de replay.
+
+## Respostas de erro
 
 ```json
 {
@@ -87,51 +148,75 @@ await supabase.auth.verifyOtp({
 
 Códigos mínimos:
 
-- `401 INTRANET_SESSION_REQUIRED` — sessão corporativa ausente ou inválida.
+- `401 INTRANET_SESSION_REQUIRED` — sessão corporativa ausente ou inválida na Intranet.
+- `401 INVALID_SIGNATURE` — assinatura servidor a servidor inválida.
+- `401 ASSERTION_EXPIRED` — asserção vencida ou fora da tolerância.
 - `403 FINANCE_PERMISSION_DENIED` — sem `financeiro:controle-bancario`.
 - `403 FINANCE_USER_BLOCKED` — perfil financeiro inativo ou bloqueado.
 - `404 FINANCE_USER_NOT_PROVISIONED` — e-mail ainda não cadastrado no Supabase financeiro.
-- `429 FINANCE_BOOTSTRAP_RATE_LIMITED` — excesso de tentativas.
+- `409 ASSERTION_REPLAYED` — nonce já utilizado.
+- `429 FINANCE_BOOTSTRAP_RATE_LIMITED` — excesso de tentativas, quando o limitador da Intranet for acionado.
 - `500 FINANCE_BOOTSTRAP_FAILED` — falha interna sem expor detalhes sensíveis.
 
-## Algoritmo obrigatório no backend da Intranet
+## Algoritmo da Netlify Function da Intranet
 
-1. Ler e validar o cookie assinado `HttpOnly` já usado pela Intranet.
-2. Carregar o usuário corporativo pelo identificador da sessão.
-3. Verificar a permissão canônica `financeiro:controle-bancario`.
-4. Aplicar rate limit por usuário, sessão e IP.
+1. Aceitar somente `POST`.
+2. Validar a sessão da Intranet usando o mecanismo já existente.
+3. Carregar o perfil corporativo e `allowedModules`.
+4. Autorizar `*`, `financeiro` ou `financeiro:controle-bancario`.
 5. Normalizar o e-mail corporativo em minúsculas.
-6. Criar um cliente Supabase financeiro com `FINANCE_SUPABASE_SERVICE_ROLE_KEY`, exclusivamente no servidor.
-7. Consultar `profiles` pelo e-mail e exigir `status = active`.
-8. Consultar `user_roles` e rejeitar `blocked`.
-9. Gerar o link temporário com `auth.admin.generateLink`.
-10. Retornar somente `properties.hashed_token`.
-11. Registrar sucesso ou falha em `security_events`/auditoria financeira.
-12. Responder com `Cache-Control: no-store`.
+6. Criar `issued_at`, `expires_at`, `nonce` criptográfico e identificador da sessão.
+7. Serializar o corpo uma única vez.
+8. Assinar `v1.<corpo>` com `FINANCE_SSO_SHARED_SECRET`.
+9. Chamar a Edge Function BNK com timeout de até 12 segundos.
+10. Repassar somente a resposta segura da Edge Function.
+11. Responder com `Cache-Control: no-store`.
+12. Nunca aceitar a identidade enviada pelo navegador.
 
-Não criar automaticamente acesso financeiro para qualquer colaborador da Intranet. O usuário precisa estar previamente provisionado e autorizado no Supabase financeiro.
+A implementação de referência está em:
 
-## Variáveis do backend da Intranet
+```text
+integration/intranet/netlify/functions/finance-session-bootstrap.mts
+```
+
+## Variáveis das Functions da Intranet
 
 ```bash
 FINANCE_SUPABASE_URL=https://fowqidmmseynoneekrse.supabase.co
-FINANCE_SUPABASE_SERVICE_ROLE_KEY=<somente servidor>
-FINANCE_REQUIRED_PERMISSION=financeiro:controle-bancario
+FINANCE_SUPABASE_PUBLISHABLE_KEY=<chave pública>
+FINANCE_SSO_SHARED_SECRET=<segredo HMAC entre servidores>
 ```
 
-A chave `FINANCE_SUPABASE_SERVICE_ROLE_KEY` deve existir apenas nas variáveis protegidas do Netlify/backend. Nunca prefixar com `VITE_`.
+Não configurar `FINANCE_SUPABASE_SERVICE_ROLE_KEY` na Intranet.
+
+## Configuração dentro do Supabase BNK
+
+A Edge Function publicada é:
+
+```text
+intranet-session-bootstrap
+```
+
+Estruturas de proteção contra replay:
+
+```text
+security.intranet_sso_nonces
+public.consume_intranet_sso_nonce(...)
+```
+
+O segredo HMAC é armazenado como configuração privada do ambiente BNK. A Service Role é usada apenas pela Edge Function do próprio projeto financeiro.
+
+Não criar automaticamente acesso financeiro para qualquer colaborador da Intranet. O usuário precisa estar previamente provisionado e autorizado no Supabase financeiro.
 
 ## Endpoint de saída
 
 ```http
 POST /api/finance/session/logout
-Cookie: <sessão HttpOnly da Intranet>
 ```
 
 Responsabilidades:
 
-- invalidar eventual ticket financeiro ainda aberto;
-- registrar o evento de saída;
+- registrar a saída financeira quando aplicável;
 - responder `204` ou `200` com `Cache-Control: no-store`;
 - não encerrar obrigatoriamente a sessão principal da Intranet.
 
@@ -142,7 +227,7 @@ O frontend encerra a sessão Supabase financeira e retorna para `/intranet`.
 No repositório BNK:
 
 ```bash
-npm ci
+npm install
 npm run build
 ```
 
@@ -163,6 +248,12 @@ O deploy final deve conter:
 ```text
 /financeiro/index.html
 /financeiro/assets/*
+```
+
+O GitHub Actions do BNK também publica o artefato:
+
+```text
+bnk-financeiro-intranet
 ```
 
 ## Rewrites no projeto da Intranet
@@ -194,6 +285,12 @@ A abertura deve ocorrer na mesma guia:
 window.location.assign('/financeiro/access');
 ```
 
+Catálogo de referência:
+
+```text
+integration/intranet/machine-finance-module.json
+```
+
 ## Segunda camada de segurança
 
 Depois da sessão temporária ser criada:
@@ -208,6 +305,10 @@ Depois da sessão temporária ser criada:
 
 - [ ] usuário sem sessão da Intranet recebe `401`;
 - [ ] usuário sem permissão recebe `403`;
+- [ ] e-mail enviado pelo navegador é ignorado;
+- [ ] assinatura HMAC adulterada recebe `401`;
+- [ ] asserção expirada recebe `401`;
+- [ ] nonce repetido recebe `409`;
 - [ ] usuário não provisionado no financeiro recebe `404`;
 - [ ] usuário bloqueado não recebe token;
 - [ ] token temporário não pode ser reutilizado;
@@ -219,5 +320,5 @@ Depois da sessão temporária ser criada:
 - [ ] não existe `iframe`;
 - [ ] assets carregam corretamente sob `/financeiro/assets/*`;
 - [ ] atualizar diretamente `/financeiro/dashboard` não gera 404;
-- [ ] `SERVICE_ROLE_KEY` não aparece no bundle ou no DevTools;
+- [ ] nenhuma `SERVICE_ROLE_KEY` financeira existe no deploy da Intranet;
 - [ ] saída do financeiro retorna para `/intranet` sem derrubar a sessão corporativa.
