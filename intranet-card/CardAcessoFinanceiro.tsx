@@ -1,14 +1,15 @@
 // Referência para o card/subcard da Intranet STEP.
 // A navegação ocorre na mesma guia e no mesmo domínio, sem iframe e sem URL externa.
+// A rota intermediária executa o launcher SSO com o Bearer token corporativo.
 import { LockKeyhole, ShieldCheck, WalletCards } from 'lucide-react';
 
-const FINANCE_ROUTE = '/financeiro/access';
+const FINANCE_LAUNCHER_ROUTE = '/intranet/financeiro/controle-bancario';
 
 export function CardAcessoFinanceiro() {
   return (
     <button
       className="step-finance-access-card"
-      onClick={() => window.location.assign(FINANCE_ROUTE)}
+      onClick={() => window.location.assign(FINANCE_LAUNCHER_ROUTE)}
       type="button"
     >
       <div className="finance-card-icon"><WalletCards size={28} /></div>
