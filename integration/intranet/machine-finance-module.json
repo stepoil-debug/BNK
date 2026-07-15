@@ -1,0 +1,26 @@
+{
+  "id": "financeiro",
+  "label": "Financeiro",
+  "description": "Gestão financeira e controle bancário com acesso restrito.",
+  "status": "available",
+  "route": "/intranet/financeiro",
+  "permissions": [
+    {
+      "id": "financeiro:controle-bancario",
+      "label": "Controle Bancário",
+      "description": "Acessar o cofre financeiro, posições bancárias, importações, histórico e relatórios.",
+      "route": "/financeiro/access"
+    }
+  ],
+  "subcards": [
+    {
+      "id": "controle-bancario",
+      "label": "Controle Bancário",
+      "description": "Saldos, investimentos, cartões, linhas de crédito, importações e auditoria.",
+      "permission": "financeiro:controle-bancario",
+      "route": "/financeiro/access",
+      "openInNewTab": false,
+      "external": false
+    }
+  ]
+}
