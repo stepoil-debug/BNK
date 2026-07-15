@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-const responseHeaders = {
+const headers = {
   "Access-Control-Allow-Origin": "https://intranet-step.netlify.app",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -10,12 +10,9 @@ const responseHeaders = {
 };
 
 Deno.serve((request: Request) => {
-  if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: responseHeaders });
-  }
-
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers });
   return new Response(JSON.stringify({
-    code: "ROUTE_RETIRED",
-    message: "Esta rota não faz parte do fluxo integrado. Abra o módulo pela Intranet STEP."
-  }), { status: 410, headers: responseHeaders });
+    code: "AUTH_PATH_DISABLED",
+    message: "O acesso por token de e-mail foi desativado. Abra o Controle Bancário pela Intranet STEP."
+  }), { status: 410, headers });
 });

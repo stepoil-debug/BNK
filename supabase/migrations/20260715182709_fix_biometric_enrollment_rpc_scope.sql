@@ -1,0 +1,3 @@
+-- Versão intermediária aplicada em produção.
+-- A definição final e corrigida de finance_biometric_complete_enrollment
+-- está consolidada em 20260715185135_enforce_biometric_before_finance_privileges.sql.

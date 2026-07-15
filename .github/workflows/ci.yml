@@ -1,0 +1,60 @@
+name: BNK CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - feature/integracao-intranet-financeiro
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install from public npm registry
+        run: npm install --no-audit --no-fund
+
+      - name: TypeScript and Vite build
+        id: app-build
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee build-diagnostics.log
+
+      - name: Publish build diagnostics
+        if: steps.app-build.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bnk-build-diagnostics
+          path: build-diagnostics.log
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Fail when build failed
+        if: steps.app-build.outcome == 'failure'
+        run: exit 1
+
+      - name: Validate finance artifact
+        run: |
+          test -f dist/financeiro/index.html
+          test -d dist/financeiro/assets
+
+      - name: Publish Intranet-ready finance bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: bnk-financeiro-intranet
+          path: dist/financeiro
+          if-no-files-found: error
+          retention-days: 14

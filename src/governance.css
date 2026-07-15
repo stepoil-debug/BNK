@@ -1,0 +1,77 @@
+.governance-page { display: grid; gap: 18px; }
+.governance-hero { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 18px; }
+.governance-hero h2 { margin: 2px 0 4px; font-size: 24px; }
+.governance-hero p { margin: 0; color: var(--muted); }
+.governance-icon { width: 58px; height: 58px; display: grid; place-items: center; border-radius: 19px; color: var(--blue); background: #edf4ff; }
+.governance-icon.owner { color: #8a5b00; background: #fff7d6; }
+.governance-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.governance-form, .access-grant-form { display: grid; gap: 14px; }
+.governance-form label, .access-grant-form label { display: grid; gap: 7px; font-weight: 800; color: var(--text); }
+.governance-form label small, .access-grant-form label small { color: var(--muted); font-weight: 600; }
+.governance-form input, .access-grant-form input, .access-grant-form select, .access-grant-form textarea { width: 100%; border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; background: #fff; color: var(--text); }
+.access-grant-form { grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; }
+.access-grant-form .grant-reason { grid-column: 1 / -2; }
+.access-grant-form textarea { min-height: 76px; resize: vertical; }
+.access-grant-form > .primary-btn { min-height: 48px; }
+.master-current-card { display: flex; align-items: center; gap: 14px; padding: 18px; border: 1px solid var(--border); border-radius: 18px; background: #fbfdff; }
+.master-current-card div:nth-child(2) { display: grid; gap: 4px; }
+.master-current-card span, .master-current-card small { color: var(--muted); }
+.role-badge { display: inline-flex; padding: 6px 10px; border-radius: 999px; font-weight: 900; font-size: 12px; }
+.role-owner { color: #805500; background: #fff5cc; }
+.role-master_admin { color: #4524a8; background: #f0ebff; }
+.role-editor { color: #075e3b; background: #e8f8f0; }
+.role-viewer { color: #164c92; background: #eaf2ff; }
+.role-auditor { color: #8a3c00; background: #fff0df; }
+.status-dot.pending_face, .status-dot.capturing, .status-dot.required, .status-dot.recapture_required { background: #fff7ed; color: #c2410c; }
+.status-dot.active { background: #eafaf2; color: #0b6b44; }
+.status-dot.revoked { background: #f1f3f6; color: #536173; }
+.icon-btn.neutral { background: #eef2f7; color: #42526a; }
+.access-role-legend { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.access-role-legend article { background: #fff; border: 1px solid var(--border); border-radius: 18px; padding: 16px; display: grid; gap: 6px; box-shadow: var(--shadow); }
+.access-role-legend svg { color: var(--blue); }
+.access-role-legend span { color: var(--muted); }
+.secondary-btn { display: inline-flex; justify-content: center; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 14px; padding: 12px 16px; background: #fff; color: var(--text); font-weight: 900; }
+.text-link-button { border: 0; background: transparent; color: var(--blue); font-weight: 900; padding: 8px; }
+
+.face-enrollment-page { min-height: 100vh; display: grid; place-items: center; padding: 28px; background: radial-gradient(circle at top left, #e9f4ff, #f4f7fb 50%); }
+.face-enrollment-card { width: min(1180px, 100%); background: #fff; border: 1px solid var(--border); border-radius: 28px; box-shadow: 0 28px 70px rgba(15, 42, 86, 0.14); padding: 26px; display: grid; gap: 22px; }
+.face-enrollment-head { display: flex; align-items: center; gap: 16px; }
+.face-enrollment-head h1 { margin: 2px 0 5px; font-size: 28px; }
+.face-enrollment-head p { margin: 0; color: var(--muted); }
+.face-enrollment-layout { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(340px, .8fr); gap: 22px; }
+.camera-stage { position: relative; min-height: 510px; overflow: hidden; border-radius: 24px; background: #061327; border: 1px solid #173158; }
+.face-video { width: 100%; height: 100%; min-height: 510px; object-fit: cover; transform: scaleX(-1); }
+.face-guide { position: absolute; width: 250px; height: 330px; border: 4px solid rgba(255,255,255,.92); border-radius: 48% 48% 45% 45%; top: 50%; left: 50%; transform: translate(-50%, -52%); box-shadow: 0 0 0 999px rgba(1, 12, 32, .28); }
+.camera-instruction { position: absolute; left: 20px; right: 20px; bottom: 18px; padding: 13px 16px; border-radius: 16px; background: rgba(1, 19, 49, .82); color: #fff; font-weight: 900; text-align: center; backdrop-filter: blur(8px); }
+.face-capture-panel { display: grid; align-content: start; gap: 14px; }
+.security-summary { display: grid; gap: 8px; padding: 14px; border: 1px solid #dbeafe; border-radius: 18px; background: #f6faff; }
+.security-summary span { display: flex; align-items: center; gap: 8px; color: #31527f; font-size: 13px; font-weight: 800; }
+.face-capture-list { display: grid; gap: 10px; }
+.face-capture-item { display: grid; grid-template-columns: 46px 1fr auto; align-items: center; gap: 11px; padding: 10px; border: 1px solid var(--border); border-radius: 16px; background: #fbfdff; }
+.face-capture-item.current { border-color: #8eb8ff; background: #f3f7ff; }
+.face-capture-item.done { border-color: #b7e7ce; background: #f4fcf8; }
+.face-capture-item > span, .face-capture-item img { width: 46px; height: 46px; border-radius: 13px; display: grid; place-items: center; object-fit: cover; background: #e8f0fc; color: var(--blue); font-weight: 900; }
+.face-capture-item div { display: grid; gap: 3px; }
+.face-capture-item small { color: var(--muted); }
+.face-capture-item svg { color: var(--green); }
+.biometric-consent { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; padding: 13px; border-radius: 16px; background: #fffaf0; border: 1px solid #f8d995; color: #674600; font-size: 13px; line-height: 1.45; }
+.biometric-consent input { margin-top: 3px; }
+.face-enrollment-footer { border-top: 1px solid var(--border); padding-top: 16px; color: var(--muted); font-size: 13px; text-align: center; }
+
+@media (max-width: 1050px) {
+  .governance-grid, .face-enrollment-layout { grid-template-columns: 1fr; }
+  .access-grant-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .access-grant-form .grant-reason { grid-column: 1 / -1; }
+  .camera-stage, .face-video { min-height: 450px; }
+}
+
+@media (max-width: 720px) {
+  .governance-hero { grid-template-columns: auto 1fr; }
+  .governance-hero .status-pill { grid-column: 1 / -1; }
+  .access-grant-form, .access-role-legend { grid-template-columns: 1fr; }
+  .face-enrollment-page { padding: 12px; }
+  .face-enrollment-card { padding: 16px; border-radius: 20px; }
+  .face-enrollment-head { align-items: flex-start; }
+  .camera-stage, .face-video { min-height: 390px; }
+  .face-guide { width: 205px; height: 278px; }
+}
