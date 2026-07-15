@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { AuthProvider } from './context/AuthContext';
 import './styles.css';
+import './governance.css';
 
 const routerBasename = import.meta.env.BASE_URL.replace(/\/$/, '') || '/';
 
