@@ -7,6 +7,28 @@
   NPM_FLAGS = "--no-audit --no-fund"
 
 [[redirects]]
-  from = "/*"
-  to = "/index.html"
+  from = "/"
+  to = "/financeiro/"
+  status = 302
+
+[[redirects]]
+  from = "/financeiro"
+  to = "/financeiro/"
+  status = 301
+
+[[redirects]]
+  from = "/financeiro/*"
+  to = "/financeiro/index.html"
   status = 200
+
+[[headers]]
+  for = "/financeiro/index.html"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "same-origin"
+
+[[headers]]
+  for = "/financeiro/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
