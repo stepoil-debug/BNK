@@ -1,6 +1,7 @@
 import { FormEvent, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { KeyRound, LockKeyhole, ShieldCheck } from 'lucide-react';
+import { financeAsset } from '../config/integration';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 
@@ -85,7 +86,7 @@ export function Login() {
     <div className="auth-page">
       <section className="auth-card">
         <div className="auth-brand">
-          <img src="/logo-step.png" alt="STEP" />
+          <img src={financeAsset('logo-step.png')} alt="STEP" />
           <span>Finance Control</span>
         </div>
 
