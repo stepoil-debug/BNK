@@ -6,6 +6,7 @@ const LAUNCH_COOKIE = 'step_finance_launch';
 const UPSTREAM_TIMEOUT_MS = 12_000;
 
 type LaunchTicket = {
+  intranet_user_id: string;
   email: string;
   permission: string;
   issued_at: number;
@@ -40,6 +41,10 @@ function readCookie(request: Request, name: string) {
   return '';
 }
 
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 function hmac(secret: string, value: string) {
   return createHmac('sha256', secret).update(value).digest('hex');
 }
@@ -62,6 +67,7 @@ function parseLaunchTicket(rawCookie: string, secret: string): LaunchTicket | nu
   try {
     const ticket = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8')) as LaunchTicket;
     if (
+      !isUuid(ticket.intranet_user_id) ||
       !ticket.email?.includes('@') ||
       ticket.permission !== REQUIRED_PERMISSION ||
       !Number.isFinite(ticket.issued_at) ||
