@@ -1,4 +1,7 @@
 export type UserRole = 'super_admin' | 'admin' | 'finance_editor' | 'finance_viewer' | 'auditor' | 'blocked';
+export type FinanceAccessRole = 'owner' | 'master_admin' | 'editor' | 'viewer' | 'auditor';
+export type FinanceAccessStatus = 'pending_face' | 'active' | 'blocked' | 'revoked';
+export type BiometricStatus = 'required' | 'capturing' | 'active' | 'recapture_required' | 'blocked' | 'revoked';
 export type DeviceStatus = 'pending' | 'approved' | 'blocked';
 export type PositionStatus = 'draft' | 'published' | 'archived';
 export type FinanceGroup = 'bank_accounts' | 'investments' | 'credit_cards' | 'credit_lines' | 'companies';
@@ -13,6 +16,40 @@ export interface Profile {
 export interface UserRoleRecord {
   user_id: string;
   role: UserRole;
+}
+
+export interface FinanceAccess {
+  id: string;
+  intranet_user_id: string | null;
+  corporate_email: string;
+  finance_user_id: string;
+  full_name: string | null;
+  role: FinanceAccessRole;
+  status: FinanceAccessStatus;
+  biometric_required: boolean;
+  biometric_status: BiometricStatus;
+  biometric_enrollment_id?: string | null;
+  expires_at?: string | null;
+  granted_at?: string;
+  last_access_at?: string | null;
+  can_manage_master: boolean;
+  can_manage_users: boolean;
+  can_edit_finance: boolean;
+}
+
+export interface BiometricEnrollmentStatus {
+  id: string;
+  status: BiometricStatus;
+  consent_version: string | null;
+  consented_at: string | null;
+  model_provider: string | null;
+  model_version: string | null;
+  quality_score: number | null;
+  enrolled_at: string | null;
+  last_verified_at: string | null;
+  failed_attempts: number;
+  locked_until: string | null;
+  sample_count: number;
 }
 
 export interface ApprovedDevice {
