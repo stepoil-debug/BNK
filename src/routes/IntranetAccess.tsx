@@ -11,6 +11,18 @@ type BootstrapPayload = {
   code?: string;
 };
 
+function normalizeBootstrapError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  if (
+    /failed to send a request to the edge function/i.test(message) ||
+    /failed to fetch/i.test(message) ||
+    /networkerror/i.test(message)
+  ) {
+    return 'A ponte financeira ainda não está publicada neste deploy da Intranet. O módulo BNK está pronto, mas as Functions /api/auth/finance-launch e /api/finance/session/bootstrap precisam ser incluídas no repositório principal da Intranet.';
+  }
+  return message || 'Não foi possível validar o acesso financeiro.';
+}
+
 export function IntranetAccess() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -41,7 +53,7 @@ export function IntranetAccess() {
 
       const payload = (await response.json().catch(() => ({}))) as BootstrapPayload;
       if (!response.ok) {
-        throw new Error(payload.message || 'Seu acesso ao Controle Bancário não foi autorizado pela Intranet.');
+        throw new Error(payload.message || `A ponte financeira respondeu com status ${response.status}.`);
       }
       if (!payload.token_hash) {
         throw new Error('A Intranet não retornou o token temporário de acesso ao financeiro.');
@@ -56,7 +68,7 @@ export function IntranetAccess() {
       await refreshAuthState();
       navigate(returnTo, { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Não foi possível validar o acesso financeiro.');
+      setError(normalizeBootstrapError(err));
       setWorking(false);
     }
   }, [navigate, refreshAuthState, returnTo]);
@@ -108,9 +120,9 @@ export function IntranetAccess() {
         ) : null}
 
         <div className="auth-security-list">
-          <span><ShieldCheck size={16} /> Permissão exigida: financeiro:controle-bancario</span>
+          <span><ShieldCheck size={16} /> Concessão financeira independente da administração comum</span>
           <span><ShieldCheck size={16} /> Token temporário de uso único</span>
-          <span><ShieldCheck size={16} /> MFA e dispositivo aprovado permanecem obrigatórios</span>
+          <span><ShieldCheck size={16} /> MFA, cadastro facial e dispositivo aprovado obrigatórios</span>
         </div>
       </section>
     </div>
