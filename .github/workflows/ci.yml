@@ -1,0 +1,36 @@
+name: BNK CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - feature/integracao-intranet-financeiro
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: TypeScript and Vite build
+        run: npm run build
+
+      - name: Validate finance artifact
+        run: |
+          test -f dist/financeiro/index.html
+          test -d dist/financeiro/assets
