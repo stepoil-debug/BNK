@@ -1,74 +1,177 @@
 # STEP Finance Control — BNK
 
-Módulo de Controle Bancário da STEP, integrado à Intranet sem perder o isolamento de segurança.
+Módulo de Controle Bancário da STEP, integrado à Intranet com banco, biometria, permissões e auditoria isolados no Supabase BNK.
 
 ## Arquitetura aprovada
 
-- Repositório financeiro separado: `STEP-SOLUTIONS/BNK`.
-- Repositório da Intranet separado: `stepoil-debug/Intranetgeral-step`.
-- Supabase financeiro separado: `fowqidmmseynoneekrse`.
-- Interface publicada dentro da mesma URL da Intranet em `/financeiro/*`.
-- Navegação na mesma guia, sem `iframe` e sem URL externa visível.
-- Permissão corporativa obrigatória: `financeiro:controle-bancario`.
-- A Intranet não recebe nem armazena a `SERVICE_ROLE_KEY` financeira.
+- Repositório financeiro: `STEP-SOLUTIONS/BNK`.
+- Repositório principal: `stepoil-debug/Intranetgeral-step`.
+- Supabase financeiro: `fowqidmmseynoneekrse`.
+- Autenticação de origem: usuários do Supabase principal da Intranet.
+- O BNK mantém somente uma identidade técnica interna, sem segundo formulário de login.
+- Interface dentro da mesma URL da Intranet em `/financeiro/*`.
+- Navegação na mesma guia, sem `iframe` e sem domínio financeiro visível.
+- A Service Role financeira permanece exclusivamente no ambiente BNK.
+
+## Fluxo completo
 
 ```text
-Intranet STEP
-  └── Financeiro
-       └── Controle Bancário
-            └── /intranet/financeiro/controle-bancario
-                 ├── POST /api/auth/finance-launch com Bearer corporativo
-                 ├── valida sessão e permissão
-                 ├── cria ticket HttpOnly de 75 segundos
-                 └── redireciona para /financeiro/access
-                        ├── consome o ticket uma única vez
-                        ├── assina asserção HMAC para o Supabase BNK
-                        ├── Supabase valida assinatura e bloqueia replay
-                        ├── emite token temporário de uso único
-                        ├── cria sessão financeira
-                        ├── exige MFA
-                        ├── valida dispositivo aprovado
-                        └── /financeiro/dashboard
+Usuário autenticado na Intranet
+  └── Financeiro > Controle Bancário
+       └── /intranet/financeiro/controle-bancario
+            ├── valida Bearer e UUID do usuário principal
+            ├── cria ticket HttpOnly de 75 segundos
+            └── /financeiro/access
+                 ├── valida HMAC e nonce de uso único
+                 ├── exige concessão existente no BNK
+                 ├── emite sessão financeira técnica
+                 ├── exige MFA/TOTP
+                 ├── exige cadastro facial no primeiro acesso
+                 ├── exige dispositivo aprovado
+                 └── /financeiro/dashboard
 ```
 
-## Fluxo de acesso
+A permissão administrativa geral da Intranet não concede acesso financeiro. O usuário precisa existir no Supabase principal e possuir uma concessão independente em `security.finance_access_grants`.
 
-1. O colaborador entra normalmente na Intranet STEP.
-2. Ao clicar em `Financeiro > Controle Bancário`, a rota interna do launcher chama `POST /api/auth/finance-launch` com o Bearer token corporativo.
-3. A Function do launcher consulta o perfil autenticado, deriva o e-mail da sessão e verifica `financeiro:controle-bancario`.
-4. A Function cria um ticket assinado, `HttpOnly`, `Secure`, `SameSite=Strict`, válido por 75 segundos e restrito a `/api/finance/session`.
-5. A Intranet redireciona na mesma guia para `/financeiro/access`.
-6. O frontend financeiro chama `POST /api/finance/session/bootstrap`; o navegador envia o ticket automaticamente, sem expô-lo ao JavaScript.
-7. A Function de bootstrap valida e consome o ticket, assina a asserção HMAC e chama a Edge Function BNK.
-8. A Edge Function `intranet-session-bootstrap` valida assinatura, prazo, nonce, perfil ativo, papel financeiro e usuário do Auth.
-9. A Edge Function gera um `token_hash` de uso único sem expor a Service Role fora do ambiente financeiro.
-10. O frontend troca o `token_hash` por uma sessão do Supabase financeiro.
-11. A senha corporativa não é solicitada novamente.
-12. O usuário conclui MFA/TOTP e a aprovação do dispositivo.
-13. RLS, perfis e auditoria continuam sendo aplicados pelo Supabase financeiro.
+## Governança de acesso
 
-## Rotas
+```text
+Proprietário do Financeiro
+  └── Administrador Master
+       ├── Edição financeira
+       ├── Somente visualização
+       └── Auditoria
+```
 
-### Intranet
+### Proprietário
 
-- `/intranet/financeiro` — card Financeiro.
-- `/intranet/financeiro/controle-bancario` — launcher SSO.
-- `/api/auth/finance-launch` — valida Bearer e cria ticket `HttpOnly`.
-- `/api/finance/session/bootstrap` — consome ticket e inicia sessão BNK.
-- `/api/finance/session/logout` — limpa ticket residual sem encerrar a sessão corporativa.
+- Existe somente um.
+- Proprietário inicial: Douglas.
+- Somente o Proprietário visualiza a rota e o botão `Administrador Master`.
+- Somente o Proprietário pode nomear, substituir, bloquear ou revogar o Master.
+- O Proprietário não pode ser alterado por administradores ou por operações comuns de concessão.
 
-### Financeiro
+### Administrador Master
 
-- `/financeiro/access` — ponte de entrada pela Intranet.
-- `/financeiro/security/challenge` — segunda validação MFA.
-- `/financeiro/security/setup` — configuração inicial do MFA.
+- Existe no máximo um Master ativo.
+- Pode conceder `editor`, `viewer` e `auditor`.
+- Não pode visualizar a opção de nomeação do Master.
+- Não pode nomear outro Master.
+- Não pode modificar ou bloquear o Proprietário.
+- A substituição feita pelo Proprietário bloqueia automaticamente o Master anterior.
+
+### Administradores comuns
+
+Administradores da Intranet, administradores legados do BNK, editores e visualizadores não podem:
+
+- abrir a gestão de acessos;
+- listar a governança por chamada direta;
+- conceder permissão financeira;
+- nomear ou visualizar a opção de Administrador Master.
+
+A restrição existe na interface, na Edge Function e nas funções SQL. Não depende apenas de esconder botões.
+
+## Identidade da Intranet
+
+Cada concessão armazena obrigatoriamente:
+
+- `intranet_user_id`: UUID real do usuário no Supabase principal;
+- `corporate_email`: e-mail corporativo;
+- `finance_user_id`: identidade técnica interna do BNK;
+- perfil e status financeiro.
+
+Novos usuários técnicos usam endereço interno não entregável:
+
+```text
+intranet-<UUID>@bnk.internal.invalid
+```
+
+Essa identidade não representa um segundo cadastro do colaborador. Ela existe apenas para sessão, RLS e auditoria no projeto Supabase separado.
+
+## Cadastro facial obrigatório
+
+No primeiro acesso autorizado:
+
+1. o usuário conclui MFA/TOTP;
+2. é direcionado para `/financeiro/security/face-enrollment`;
+3. aceita o consentimento biométrico;
+4. realiza três capturas: frontal, esquerda e direita;
+5. o backend valida resolução, tamanho, poses e imagens distintas;
+6. as referências são gravadas no Supabase BNK;
+7. somente após a conclusão o papel financeiro deixa o estado `blocked`;
+8. o usuário segue para aprovação do dispositivo.
+
+### Armazenamento
+
+- Bucket privado: `biometric-reference-images`.
+- Limite por imagem: 5 MB.
+- Formatos: JPEG, PNG ou WebP.
+- Hash SHA-256 por captura.
+- Tabelas no schema privado `security`.
+- RLS forçada e ausência de acesso para `anon` e `authenticated`.
+- Descriptor facial criptografado com AES-256-GCM quando o adaptador de modelo fornecer embedding.
+- Auditoria imutável de conclusão e mudanças de acesso.
+
+O frontend atual utiliza o adaptador `step-guided-face-capture`, com guia oval, sequência aleatória de poses e validação de qualidade. O motor exato de comparação utilizado pelo Apontamento será conectado quando o repositório correspondente estiver disponível; toda a estrutura e o armazenamento BNK já estão preparados para recebê-lo sem migrar dados.
+
+## Bloqueio antes da biometria
+
+Enquanto `status=pending_face` ou a biometria não estiver `active`:
+
+- `public.user_roles` permanece como `blocked`;
+- nenhuma tabela financeira é liberada por RLS;
+- nenhuma função administrativa aceita a operação;
+- a sessão serve somente para MFA, cadastro facial e validação de dispositivo.
+
+## Segurança do banco
+
+Tabelas privadas:
+
+```text
+security.finance_governance
+security.finance_access_grants
+security.finance_biometric_enrollments
+security.finance_biometric_samples
+security.finance_biometric_sessions
+security.finance_access_audit
+security.intranet_sso_nonces
+security.intranet_identity_links
+```
+
+Proteções:
+
+- RLS habilitada e forçada;
+- sem privilégios para `public`, `anon` ou `authenticated`;
+- acesso somente por `service_role` dentro das Edge Functions;
+- auditoria com trigger que impede `UPDATE` e `DELETE`;
+- um único Proprietário e um único Master por índices únicos;
+- nonce de uso único contra replay;
+- HMAC-SHA256 entre a Intranet e o BNK;
+- ticket e token temporários com validade curta.
+
+## Rotas financeiras
+
+- `/financeiro/access` — entrada pela ponte da Intranet.
+- `/financeiro/security/setup` — configuração inicial do TOTP.
+- `/financeiro/security/challenge` — desafio MFA.
+- `/financeiro/security/face-enrollment` — cadastro facial obrigatório.
 - `/financeiro/security/device-check` — aprovação do dispositivo.
 - `/financeiro/dashboard` — dashboard.
-- `/financeiro/position/new` — nova posição financeira.
+- `/financeiro/position/new` — nova posição.
 - `/financeiro/history` — histórico.
 - `/financeiro/imports` — importações.
 - `/financeiro/reports` — relatórios.
-- `/financeiro/security` — administração de segurança.
+- `/financeiro/access-management` — usuários, somente Proprietário/Master.
+- `/financeiro/master-administrator` — rota exclusiva e invisível ao Proprietário.
+- `/financeiro/security` — segurança operacional, somente Proprietário/Master.
+
+## Edge Functions BNK
+
+- `intranet-session-bootstrap` — cria sessão somente após validar concessão BNK.
+- `finance-access-control` — governança e usuários financeiros.
+- `finance-biometric` — sessões e conclusão do cadastro facial.
+
+Rotas antigas por token de e-mail, login local e passkey foram aposentadas. As tabelas e RPCs correspondentes não possuem mais privilégios capazes de criar uma segunda autenticação.
 
 ## Build para a Intranet
 
@@ -77,27 +180,25 @@ npm install
 npm run build
 ```
 
-O Vite gera o módulo em:
+Saída:
 
 ```text
 dist/financeiro/
 ```
 
-Esse diretório deve ser incorporado ao deploy da Intranet como:
+Copiar para:
 
 ```text
 public/financeiro/
 ```
 
-O artefato já utiliza `base=/financeiro/` e `BrowserRouter basename=/financeiro`.
-
-O workflow `BNK CI` também publica o artefato `bnk-financeiro-intranet`, pronto para ser copiado pelo pipeline da Intranet.
+O workflow `BNK CI` publica o artefato `bnk-financeiro-intranet`.
 
 ## Variáveis do frontend
 
 ```bash
 VITE_SUPABASE_URL=https://fowqidmmseynoneekrse.supabase.co
-VITE_SUPABASE_ANON_KEY=SUA_CHAVE_PUBLICAVEL_FINANCEIRA
+VITE_SUPABASE_ANON_KEY=<chave pública do BNK>
 VITE_INTRANET_INTEGRATION=true
 VITE_ALLOW_STANDALONE_LOGIN=false
 VITE_FINANCE_BOOTSTRAP_URL=/api/finance/session/bootstrap
@@ -105,17 +206,17 @@ VITE_FINANCE_LOGOUT_URL=/api/finance/session/logout
 VITE_INTRANET_HOME_URL=/intranet
 ```
 
-## Variáveis exclusivas das Functions da Intranet
+## Variáveis das Functions da Intranet
 
 ```bash
 FINANCE_SUPABASE_URL=https://fowqidmmseynoneekrse.supabase.co
-FINANCE_SUPABASE_PUBLISHABLE_KEY=SUA_CHAVE_PUBLICAVEL_FINANCEIRA
-FINANCE_SSO_SHARED_SECRET=SEGREDO_HMAC_COMPARTILHADO_APENAS_ENTRE_SERVIDORES
+FINANCE_SUPABASE_PUBLISHABLE_KEY=<chave pública do BNK>
+FINANCE_SSO_SHARED_SECRET=<segredo HMAC protegido>
 ```
 
-A Intranet **não** usa `FINANCE_SUPABASE_SERVICE_ROLE_KEY`. A Service Role permanece exclusivamente no Supabase BNK, onde a Edge Function é executada.
+A Intranet não recebe `FINANCE_SUPABASE_SERVICE_ROLE_KEY`.
 
-Referências para aplicação na Intranet:
+## Arquivos para a próxima etapa
 
 ```text
 integration/intranet/frontend/FinanceControlLauncher.tsx
@@ -125,42 +226,20 @@ integration/intranet/netlify/functions/finance-session-logout.mts
 integration/intranet/machine-finance-module.json
 ```
 
-O contrato completo está em `docs/INTEGRACAO_INTRANET_STEP.md`.
+O deploy atual da Intranet ainda precisa receber esses arquivos. Sem eles, `/financeiro/access` exibe que a ponte financeira não está publicada, pois não existem no deploy ativo:
 
-## Desenvolvimento isolado
-
-Somente para desenvolvimento local ou contingência administrativa controlada:
-
-```bash
-VITE_INTRANET_INTEGRATION=false
-VITE_ALLOW_STANDALONE_LOGIN=true
+```text
+/api/auth/finance-launch
+/api/finance/session/bootstrap
+/api/finance/session/logout
 ```
 
-Em produção, o login por senha deve permanecer desativado e a entrada deve ocorrer pela Intranet.
+## Escopo funcional
 
-## Segurança preservada
+O dashboard é alimentado manualmente e por importações, sem Open Finance nesta fase:
 
-- Supabase financeiro independente.
-- Service Role restrita ao ambiente BNK.
-- Bearer corporativo utilizado apenas pelo launcher da Intranet.
-- Ticket `HttpOnly`, `Secure`, `SameSite=Strict` e de curta duração.
-- Asserção HMAC com validade máxima de 90 segundos.
-- Nonce de uso único e proteção contra replay.
-- MFA/TOTP obrigatório.
-- Aprovação manual de dispositivo.
-- Perfis `super_admin`, `admin`, `finance_editor`, `finance_viewer`, `auditor` e `blocked`.
-- RLS nas tabelas financeiras.
-- Auditoria e eventos de segurança.
-- Token temporário de uso único.
-- Sessão corporativa preservada.
-- Sem `iframe` e sem credenciais sensíveis no navegador.
-
-## Escopo funcional atual
-
-O dashboard é alimentado manualmente e por importações, sem Open Finance nesta fase. Os grupos principais são:
-
-- Contas bancárias.
-- Investimentos.
-- Cartões de crédito.
-- Linhas de crédito.
-- Empresas e contas vinculadas.
+- contas bancárias;
+- investimentos;
+- cartões de crédito;
+- linhas de crédito;
+- empresas e contas vinculadas.
