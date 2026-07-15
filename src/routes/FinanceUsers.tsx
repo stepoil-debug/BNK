@@ -48,7 +48,7 @@ export function FinanceUsers() {
           action: 'grant_access',
           corporate_email: email,
           full_name: fullName,
-          intranet_user_id: intranetUserId || null,
+          intranet_user_id: intranetUserId,
           role,
           reason
         }
@@ -114,11 +114,11 @@ export function FinanceUsers() {
       {error ? <div className="error-box">{error}</div> : null}
 
       <section className="panel">
-        <div className="panel-head"><div><h2>Conceder acesso</h2><p>Administradores comuns da Intranet não aparecem como autorizadores</p></div></div>
+        <div className="panel-head"><div><h2>Conceder acesso</h2><p>Somente usuários existentes no Supabase principal da Intranet podem ser autorizados</p></div></div>
         <form className="access-grant-form" onSubmit={grant}>
           <label>Nome completo<input value={fullName} onChange={(event) => setFullName(event.target.value)} required /></label>
           <label>E-mail corporativo<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
-          <label>UUID da Intranet <small>Opcional até conectar o Supabase principal</small><input value={intranetUserId} onChange={(event) => setIntranetUserId(event.target.value)} /></label>
+          <label>UUID do usuário no Supabase principal<input value={intranetUserId} onChange={(event) => setIntranetUserId(event.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" required pattern="[0-9a-fA-F-]{36}" /></label>
           <label>Perfil financeiro
             <select value={role} onChange={(event) => setRole(event.target.value as typeof role)}>
               <option value="viewer">Somente visualização</option>
