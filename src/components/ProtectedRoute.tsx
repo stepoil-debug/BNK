@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { financeIntegration } from '../config/integration';
 import { supabase } from '../lib/supabase';
 import { getDeviceFingerprint } from '../lib/device';
 import { useAuth } from '../context/AuthContext';
@@ -62,9 +63,18 @@ export function ProtectedRoute() {
     void runGate();
   }, [loading, session, role, location, navigate]);
 
-  if (loading || gate === 'checking') return <div className="page-loader">Validando camadas de segurança...</div>;
-  if (!session) return <Navigate to="/login" replace state={{ from: location }} />;
+  if (loading) return <div className="page-loader">Validando sessão financeira...</div>;
+
+  if (!session) {
+    const returnTo = `${location.pathname}${location.search}`;
+    const destination = financeIntegration.enabled
+      ? `/access?returnTo=${encodeURIComponent(returnTo)}`
+      : '/login';
+    return <Navigate to={destination} replace state={{ from: location }} />;
+  }
+
   if (role === 'blocked') return <Navigate to="/blocked" replace />;
+  if (gate === 'checking') return <div className="page-loader">Validando camadas de segurança...</div>;
 
   return <Outlet />;
 }
