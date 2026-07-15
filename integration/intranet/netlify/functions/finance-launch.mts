@@ -9,6 +9,7 @@ const PROFILE_TIMEOUT_MS = 12_000;
 type UnknownRecord = Record<string, unknown>;
 
 type IntranetIdentity = {
+  userId: string;
   email: string;
   allowedModules: string[];
   sessionId: string;
@@ -34,6 +35,10 @@ function stringArray(...values: unknown[]) {
       .filter(Boolean);
   }
   return [];
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function hasFinancePermission(allowedModules: string[]) {
@@ -84,6 +89,20 @@ async function resolveAuthenticatedIntranetUser(request: Request): Promise<Intra
   const user = asRecord(payload.user ?? data.user);
   const profile = asRecord(payload.profile ?? data.profile ?? user);
 
+  const userId = firstString(
+    profile.id,
+    profile.user_id,
+    profile.userId,
+    user.id,
+    user.user_id,
+    user.userId,
+    data.id,
+    data.user_id,
+    data.userId,
+    payload.id,
+    payload.user_id,
+    payload.userId
+  );
   const email = firstString(profile.email, user.email, data.email, payload.email).toLowerCase();
   const allowedModules = stringArray(
     profile.allowedModules,
@@ -96,9 +115,10 @@ async function resolveAuthenticatedIntranetUser(request: Request): Promise<Intra
     payload.allowed_modules
   );
 
+  if (!isUuid(userId)) throw new Error('Perfil corporativo sem UUID válido.');
   if (!email || !email.includes('@')) throw new Error('Perfil corporativo sem e-mail válido.');
 
-  const authMaterial = `${authorization ?? ''}|${cookie ?? ''}|${email}`;
+  const authMaterial = `${authorization ?? ''}|${cookie ?? ''}|${userId}|${email}`;
   const sessionId = firstString(
     profile.sessionId,
     profile.session_id,
@@ -111,7 +131,7 @@ async function resolveAuthenticatedIntranetUser(request: Request): Promise<Intra
     sha256(authMaterial)
   );
 
-  return { email, allowedModules, sessionId };
+  return { userId, email, allowedModules, sessionId };
 }
 
 export default async function financeLaunch(request: Request, _context: Context) {
@@ -137,6 +157,7 @@ export default async function financeLaunch(request: Request, _context: Context)
 
     const issuedAt = Date.now();
     const ticket = {
+      intranet_user_id: identity.userId,
       email: identity.email,
       permission: REQUIRED_PERMISSION,
       issued_at: issuedAt,
