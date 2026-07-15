@@ -1,20 +1,23 @@
 import type { Config, Context } from '@netlify/functions';
 
+const CLEAR_LAUNCH_COOKIE = 'step_finance_launch=; Path=/api/finance/session; HttpOnly; Secure; SameSite=Strict; Max-Age=0';
+
 function noStoreResponse() {
   return new Response(null, {
     status: 204,
     headers: {
       'Cache-Control': 'no-store, max-age=0',
       'X-Content-Type-Options': 'nosniff',
-      'Referrer-Policy': 'no-referrer'
+      'Referrer-Policy': 'no-referrer',
+      'Set-Cookie': CLEAR_LAUNCH_COOKIE
     }
   });
 }
 
 /**
  * A sessão financeira do Supabase é encerrada no frontend antes desta chamada.
- * Este endpoint existe para manter o contrato interno, permitir auditoria futura
- * e retornar à Intranet sem encerrar a sessão corporativa principal.
+ * Este endpoint limpa qualquer ticket de lançamento residual e retorna à
+ * Intranet sem encerrar a sessão corporativa principal.
  */
 export default async function financeSessionLogout(request: Request, _context: Context) {
   if (request.method !== 'POST') {
@@ -22,7 +25,8 @@ export default async function financeSessionLogout(request: Request, _context: C
       status: 405,
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
-        'Cache-Control': 'no-store, max-age=0'
+        'Cache-Control': 'no-store, max-age=0',
+        'Set-Cookie': CLEAR_LAUNCH_COOKIE
       }
     });
   }
