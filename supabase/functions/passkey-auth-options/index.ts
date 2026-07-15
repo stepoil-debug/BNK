@@ -1,27 +1,21 @@
-// Passkey/WebAuthn - opções para validação biométrica pós-login.
-import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
-import { createClient } from 'npm:@supabase/supabase-js@2';
-import { generateAuthenticationOptions } from 'npm:@simplewebauthn/server@10';
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-const corsHeaders = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' };
+const responseHeaders = {
+  "Access-Control-Allow-Origin": "https://intranet-step.netlify.app",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Content-Type": "application/json",
+  "Cache-Control": "no-store, max-age=0",
+  "X-Content-Type-Options": "nosniff"
+};
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } });
-  const adminClient = createClient(supabaseUrl, serviceKey);
-  const { data: userData, error: userError } = await userClient.auth.getUser();
-  if (userError || !userData.user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
+Deno.serve((request: Request) => {
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: responseHeaders });
+  }
 
-  const { data: creds } = await adminClient.from('webauthn_credentials').select('credential_id, transports').eq('user_id', userData.user.id);
-  const options = await generateAuthenticationOptions({
-    rpID: Deno.env.get('WEBAUTHN_RP_ID')!,
-    userVerification: 'required',
-    allowCredentials: (creds ?? []).map((cred: any) => ({ id: cred.credential_id, type: 'public-key', transports: cred.transports ?? undefined }))
-  });
-
-  await adminClient.from('webauthn_challenges').insert({ user_id: userData.user.id, challenge: options.challenge, flow: 'authentication' });
-  return new Response(JSON.stringify(options), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  return new Response(JSON.stringify({
+    code: "ROUTE_RETIRED",
+    message: "Esta rota não faz parte do fluxo integrado. Abra o módulo pela Intranet STEP."
+  }), { status: 410, headers: responseHeaders });
 });
