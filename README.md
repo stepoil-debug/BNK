@@ -16,33 +16,48 @@ Módulo de Controle Bancário da STEP, integrado à Intranet sem perder o isolam
 Intranet STEP
   └── Financeiro
        └── Controle Bancário
-            └── /financeiro/access
-                 ├── valida sessão e permissão corporativa
-                 ├── assina uma asserção HMAC de curta duração
-                 ├── Supabase BNK valida assinatura e bloqueia replay
-                 ├── emite token temporário de uso único
-                 ├── cria sessão no Supabase financeiro
-                 ├── exige MFA
-                 ├── valida dispositivo aprovado
-                 └── /financeiro/dashboard
+            └── /intranet/financeiro/controle-bancario
+                 ├── POST /api/auth/finance-launch com Bearer corporativo
+                 ├── valida sessão e permissão
+                 ├── cria ticket HttpOnly de 75 segundos
+                 └── redireciona para /financeiro/access
+                        ├── consome o ticket uma única vez
+                        ├── assina asserção HMAC para o Supabase BNK
+                        ├── Supabase valida assinatura e bloqueia replay
+                        ├── emite token temporário de uso único
+                        ├── cria sessão financeira
+                        ├── exige MFA
+                        ├── valida dispositivo aprovado
+                        └── /financeiro/dashboard
 ```
 
 ## Fluxo de acesso
 
 1. O colaborador entra normalmente na Intranet STEP.
-2. A Intranet verifica a permissão `financeiro:controle-bancario`.
-3. O frontend financeiro chama `POST /api/finance/session/bootstrap` usando a sessão corporativa existente.
-4. A Function da Intranet deriva o e-mail e a identidade exclusivamente da sessão validada; não aceita identidade enviada pelo navegador.
-5. A Function cria uma asserção de até 90 segundos, com `nonce` único, e assina o corpo com HMAC-SHA256.
-6. A Edge Function `intranet-session-bootstrap`, hospedada no Supabase BNK, valida assinatura, prazo, nonce, perfil ativo, papel financeiro e usuário do Auth.
-7. A Edge Function gera um `token_hash` de uso único sem expor a Service Role fora do ambiente financeiro.
-8. O frontend troca o `token_hash` por uma sessão do Supabase financeiro.
-9. A senha corporativa não é solicitada novamente.
-10. O usuário conclui a segunda camada MFA/TOTP.
-11. O dispositivo precisa estar aprovado no módulo financeiro.
-12. RLS, perfis e auditoria continuam sendo aplicados pelo Supabase financeiro.
+2. Ao clicar em `Financeiro > Controle Bancário`, a rota interna do launcher chama `POST /api/auth/finance-launch` com o Bearer token corporativo.
+3. A Function do launcher consulta o perfil autenticado, deriva o e-mail da sessão e verifica `financeiro:controle-bancario`.
+4. A Function cria um ticket assinado, `HttpOnly`, `Secure`, `SameSite=Strict`, válido por 75 segundos e restrito a `/api/finance/session`.
+5. A Intranet redireciona na mesma guia para `/financeiro/access`.
+6. O frontend financeiro chama `POST /api/finance/session/bootstrap`; o navegador envia o ticket automaticamente, sem expô-lo ao JavaScript.
+7. A Function de bootstrap valida e consome o ticket, assina a asserção HMAC e chama a Edge Function BNK.
+8. A Edge Function `intranet-session-bootstrap` valida assinatura, prazo, nonce, perfil ativo, papel financeiro e usuário do Auth.
+9. A Edge Function gera um `token_hash` de uso único sem expor a Service Role fora do ambiente financeiro.
+10. O frontend troca o `token_hash` por uma sessão do Supabase financeiro.
+11. A senha corporativa não é solicitada novamente.
+12. O usuário conclui MFA/TOTP e a aprovação do dispositivo.
+13. RLS, perfis e auditoria continuam sendo aplicados pelo Supabase financeiro.
 
 ## Rotas
+
+### Intranet
+
+- `/intranet/financeiro` — card Financeiro.
+- `/intranet/financeiro/controle-bancario` — launcher SSO.
+- `/api/auth/finance-launch` — valida Bearer e cria ticket `HttpOnly`.
+- `/api/finance/session/bootstrap` — consome ticket e inicia sessão BNK.
+- `/api/finance/session/logout` — limpa ticket residual sem encerrar a sessão corporativa.
+
+### Financeiro
 
 - `/financeiro/access` — ponte de entrada pela Intranet.
 - `/financeiro/security/challenge` — segunda validação MFA.
@@ -100,7 +115,17 @@ FINANCE_SSO_SHARED_SECRET=SEGREDO_HMAC_COMPARTILHADO_APENAS_ENTRE_SERVIDORES
 
 A Intranet **não** usa `FINANCE_SUPABASE_SERVICE_ROLE_KEY`. A Service Role permanece exclusivamente no Supabase BNK, onde a Edge Function é executada.
 
-O contrato completo da ponte está em `docs/INTEGRACAO_INTRANET_STEP.md`. Uma implementação de referência da Netlify Function está em `integration/intranet/netlify/functions/finance-session-bootstrap.mts`.
+Referências para aplicação na Intranet:
+
+```text
+integration/intranet/frontend/FinanceControlLauncher.tsx
+integration/intranet/netlify/functions/finance-launch.mts
+integration/intranet/netlify/functions/finance-session-bootstrap.mts
+integration/intranet/netlify/functions/finance-session-logout.mts
+integration/intranet/machine-finance-module.json
+```
+
+O contrato completo está em `docs/INTEGRACAO_INTRANET_STEP.md`.
 
 ## Desenvolvimento isolado
 
@@ -117,6 +142,8 @@ Em produção, o login por senha deve permanecer desativado e a entrada deve oco
 
 - Supabase financeiro independente.
 - Service Role restrita ao ambiente BNK.
+- Bearer corporativo utilizado apenas pelo launcher da Intranet.
+- Ticket `HttpOnly`, `Secure`, `SameSite=Strict` e de curta duração.
 - Asserção HMAC com validade máxima de 90 segundos.
 - Nonce de uso único e proteção contra replay.
 - MFA/TOTP obrigatório.
