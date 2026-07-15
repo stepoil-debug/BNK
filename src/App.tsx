@@ -2,21 +2,30 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AdminRoute } from './components/AdminRoute';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { financeIntegration } from './config/integration';
 import { Blocked } from './routes/Blocked';
 import { Dashboard } from './routes/Dashboard';
 import { DeviceCheck } from './routes/DeviceCheck';
 import { FinancialPositionForm } from './routes/FinancialPositionForm';
 import { History } from './routes/History';
 import { Imports } from './routes/Imports';
+import { IntranetAccess } from './routes/IntranetAccess';
 import { Login } from './routes/Login';
 import { Reports } from './routes/Reports';
 import { SecurityAdmin } from './routes/SecurityAdmin';
 import { SecuritySetup } from './routes/SecuritySetup';
 
 export default function App() {
+  const standaloneLoginAllowed = !financeIntegration.enabled || financeIntegration.allowStandaloneLogin;
+
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/access" element={<IntranetAccess />} />
+      <Route
+        path="/login"
+        element={standaloneLoginAllowed ? <Login /> : <Navigate to="/access" replace />}
+      />
       <Route path="/blocked" element={<Blocked />} />
       <Route element={<ProtectedRoute />}>
         <Route path="/security/setup" element={<SecuritySetup />} />
