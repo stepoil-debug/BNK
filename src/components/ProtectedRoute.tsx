@@ -11,7 +11,7 @@ type GateStatus = 'checking' | 'allowed';
 const securityPaths = ['/security/setup', '/security/device-check', '/security/face-enrollment'];
 
 export function ProtectedRoute() {
-  const { session, loading, role, access, accessError, requiresFaceEnrollment } = useAuth();
+  const { session, loading, access, accessError, requiresFaceEnrollment } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [gate, setGate] = useState<GateStatus>('checking');
@@ -21,7 +21,7 @@ export function ProtectedRoute() {
       if (loading || !session?.user) return;
       setGate('checking');
 
-      if (!access || access.status === 'blocked' || access.status === 'revoked' || role === 'blocked') {
+      if (!access || access.status === 'blocked' || access.status === 'revoked') {
         navigate('/blocked', { replace: true });
         return;
       }
@@ -73,7 +73,7 @@ export function ProtectedRoute() {
       setGate('allowed');
     }
     void runGate();
-  }, [loading, session, role, access, requiresFaceEnrollment, location, navigate]);
+  }, [loading, session, access, requiresFaceEnrollment, location, navigate]);
 
   if (loading) return <div className="page-loader">Validando sessão e governança financeira...</div>;
 
@@ -85,7 +85,7 @@ export function ProtectedRoute() {
     return <Navigate to={destination} replace state={{ from: location }} />;
   }
 
-  if (!access || access.status === 'blocked' || access.status === 'revoked' || role === 'blocked') {
+  if (!access || access.status === 'blocked' || access.status === 'revoked') {
     return <Navigate to="/blocked" replace state={{ message: accessError }} />;
   }
 
