@@ -33,3 +33,11 @@ jobs:
         run: |
           test -f dist/financeiro/index.html
           test -d dist/financeiro/assets
+
+      - name: Publish Intranet-ready finance bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: bnk-financeiro-intranet
+          path: dist/financeiro
+          if-no-files-found: error
+          retention-days: 14
