@@ -162,7 +162,7 @@ Proteções:
 - `/financeiro/imports` — importações.
 - `/financeiro/reports` — relatórios.
 - `/financeiro/access-management` — usuários, somente Proprietário/Master.
-- `/financeiro/master-administrator` — rota exclusiva e invisível ao Proprietário.
+- `/financeiro/master-administrator` — rota visível somente ao Proprietário e invisível aos demais.
 - `/financeiro/security` — segurança operacional, somente Proprietário/Master.
 
 ## Edge Functions BNK
