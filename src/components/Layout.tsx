@@ -12,6 +12,7 @@ import {
   Shield,
   WalletCards
 } from 'lucide-react';
+import { financeAsset, financeIntegration } from '../config/integration';
 import { useAuth } from '../context/AuthContext';
 
 const navItems = [
@@ -44,6 +45,20 @@ export function Layout() {
 
   async function handleLogout() {
     await signOut();
+
+    if (financeIntegration.enabled) {
+      try {
+        await fetch(financeIntegration.logoutUrl, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { Accept: 'application/json' }
+        });
+      } finally {
+        window.location.assign(financeIntegration.intranetHomeUrl);
+      }
+      return;
+    }
+
     navigate('/login');
   }
 
@@ -51,7 +66,7 @@ export function Layout() {
     <div className="app-shell modern-shell">
       <aside className="sidebar">
         <div className="brand brand-card">
-          <img src="/logo-step.png" alt="STEP Integrated Solutions" />
+          <img src={financeAsset('logo-step.png')} alt="STEP Integrated Solutions" />
         </div>
 
         <nav>
@@ -74,16 +89,16 @@ export function Layout() {
           <p>
             Dados protegidos, acesso controlado, importação manual e rastreabilidade completa das movimentações.
           </p>
-          <small>Projeto separado, MFA obrigatório e dispositivos aprovados.</small>
+          <small>Integrado à Intranet, com Supabase financeiro isolado, MFA e dispositivos aprovados.</small>
         </div>
 
         <button className="logout" onClick={handleLogout}>
-          <LogOut size={18} /> Sair
+          <LogOut size={18} /> Sair do financeiro
         </button>
 
         <div className="sidebar-footer">
           <span>© 2026 STEP Integrated Solutions</span>
-          <small>Versão 1.0.0</small>
+          <small>Versão 1.1.0</small>
         </div>
       </aside>
 
