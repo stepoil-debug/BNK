@@ -27,7 +27,24 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: TypeScript and Vite build
-        run: npm run build
+        id: app-build
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee build-diagnostics.log
+
+      - name: Publish build diagnostics
+        if: steps.app-build.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bnk-build-diagnostics
+          path: build-diagnostics.log
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Fail when build failed
+        if: steps.app-build.outcome == 'failure'
+        run: exit 1
 
       - name: Validate finance artifact
         run: |
