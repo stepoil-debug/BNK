@@ -40,7 +40,7 @@ export function MasterAdmin() {
           action: 'assign_master',
           corporate_email: email,
           full_name: fullName,
-          intranet_user_id: intranetUserId || null
+          intranet_user_id: intranetUserId
         }
       });
       if (functionError) throw functionError;
@@ -102,8 +102,8 @@ export function MasterAdmin() {
           <form className="governance-form" onSubmit={assignMaster}>
             <label>Nome completo<input value={fullName} onChange={(event) => setFullName(event.target.value)} required /></label>
             <label>E-mail corporativo<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
-            <label>UUID do usuário na Intranet <small>Opcional até a conexão do Supabase principal</small><input value={intranetUserId} onChange={(event) => setIntranetUserId(event.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" /></label>
-            <div className="warning-box">A pessoa nomeada poderá conceder acesso de visualização, edição ou auditoria, mas nunca poderá nomear outro Administrador Master nem alterar o Proprietário.</div>
+            <label>UUID do usuário no Supabase principal da Intranet<input value={intranetUserId} onChange={(event) => setIntranetUserId(event.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" required pattern="[0-9a-fA-F-]{36}" /></label>
+            <div className="warning-box">A pessoa nomeada poderá conceder acesso de visualização, edição ou auditoria, mas nunca poderá visualizar esta opção, nomear outro Administrador Master ou alterar o Proprietário.</div>
             <button className="primary-btn" disabled={saving}>{saving ? 'Aplicando governança...' : master ? 'Substituir Administrador Master' : 'Definir Administrador Master'}</button>
           </form>
         </section>
