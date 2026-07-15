@@ -1,62 +1,86 @@
 # Provisionamento de identidade Intranet → BNK
 
-A identidade autenticada na Intranet pode usar um e-mail corporativo diferente do e-mail do Supabase Auth financeiro. O vínculo é explícito e fica em:
+## Fonte de identidade
+
+O usuário é autenticado exclusivamente pelo Supabase principal da Intranet. O BNK não mantém um segundo cadastro de login para o colaborador.
+
+Cada acesso autorizado precisa estar em:
+
+```text
+security.finance_access_grants
+```
+
+Campos obrigatórios:
+
+- `intranet_user_id`: UUID real do usuário no Supabase principal;
+- `corporate_email`: e-mail corporativo normalizado;
+- `finance_user_id`: identidade técnica interna do BNK;
+- `role`: `owner`, `master_admin`, `editor`, `viewer` ou `auditor`;
+- `status`: `pending_face`, `active`, `blocked` ou `revoked`;
+- `biometric_required`: sempre `true` para usuários financeiros.
+
+## Regra de criação
+
+Não inserir usuários financeiros manualmente pelo SQL e não criar acesso somente pelo e-mail.
+
+O fluxo aprovado é:
+
+1. selecionar um usuário existente no Supabase principal da Intranet;
+2. enviar o UUID, nome e e-mail corporativo para `finance-access-control`;
+3. a Edge Function cria ou localiza a identidade técnica interna;
+4. a função SQL registra a concessão e a auditoria;
+5. `public.user_roles` permanece `blocked`;
+6. no primeiro acesso, o usuário cadastra a biometria facial;
+7. somente após biometria ativa o papel financeiro é liberado.
+
+A identidade técnica criada para novos usuários utiliza e-mail interno não entregável:
+
+```text
+intranet-<UUID>@bnk.internal.invalid
+```
+
+Esse e-mail não é usado para login, recuperação de senha ou envio de token.
+
+## Quem pode conceder
+
+- `owner`: concede usuários comuns e define o Administrador Master.
+- `master_admin`: concede somente `editor`, `viewer` e `auditor`.
+- qualquer outro perfil: não lista nem modifica concessões.
+
+A rota de nomeação do Master é visível e executável somente pelo Proprietário.
+
+## Compatibilidade anterior
+
+A tabela abaixo permanece apenas para compatibilidade com o primeiro vínculo criado antes da adoção do UUID principal:
 
 ```text
 security.intranet_identity_links
 ```
 
-## Regra
+Ela não deve ser usada para novas concessões. O bootstrap atual consulta `finance_access_grants` e vincula `intranet_user_id` no primeiro lançamento autenticado.
 
-- `corporate_email`: e-mail retornado pela sessão da Intranet, normalizado em minúsculas.
-- `finance_user_id`: UUID existente em `auth.users` e `public.profiles` do BNK.
-- `status`: `active`, `blocked` ou `revoked`.
+## Bloqueio e revogação
 
-A Edge Function tenta primeiro esse vínculo. Somente quando não existe vínculo ela tenta localizar um perfil financeiro com o mesmo e-mail corporativo.
+As mudanças são feitas somente pela Edge Function `finance-access-control`, que chama:
 
-## Criar ou atualizar um vínculo
-
-Execute no projeto Supabase BNK, substituindo os e-mails:
-
-```sql
-insert into security.intranet_identity_links (
-  corporate_email,
-  finance_user_id,
-  status,
-  updated_at
-)
-select
-  lower('usuario.corporativo@step-og.com'),
-  p.id,
-  'active',
-  now()
-from public.profiles p
-where lower(p.email) = lower('email-do-usuario-no-bnk@example.com')
-on conflict (corporate_email) do update
-set finance_user_id = excluded.finance_user_id,
-    status = excluded.status,
-    updated_at = now();
+```text
+public.finance_change_access_status(...)
 ```
 
-## Bloquear ou revogar
+Regras:
 
-```sql
-update security.intranet_identity_links
-set status = 'blocked', updated_at = now()
-where corporate_email = lower('usuario.corporativo@step-og.com');
-```
-
-```sql
-update security.intranet_identity_links
-set status = 'revoked', updated_at = now()
-where corporate_email = lower('usuario.corporativo@step-og.com');
-```
-
-Um vínculo bloqueado ou revogado impede a emissão do token financeiro, mesmo que a conta BNK continue ativa.
+- o Proprietário nunca pode ser bloqueado por essa operação;
+- somente o Proprietário modifica o Master;
+- o Master não modifica a si mesmo para preservar privilégios;
+- ativação é recusada enquanto a biometria não estiver `active`;
+- todo bloqueio, reativação ou revogação exige motivo e gera auditoria.
 
 ## Segurança
 
-- tabela com RLS;
-- sem permissões para `anon` ou `authenticated`;
-- acesso somente por `service_role` dentro do Supabase BNK;
-- resolução feita pela RPC `public.resolve_intranet_finance_identity`, executável somente por `service_role`.
+- schema `security` sem acesso para `public`, `anon` ou `authenticated`;
+- RLS forçada nas tabelas de governança e biometria;
+- funções administrativas executáveis somente por `service_role`;
+- auditoria imutável;
+- um único Proprietário e um único Master;
+- identidade da Intranet vinculada pelo UUID, não apenas pelo e-mail;
+- rotas antigas de login local, token por e-mail e passkey aposentadas.
