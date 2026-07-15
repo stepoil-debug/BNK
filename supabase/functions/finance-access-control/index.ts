@@ -68,7 +68,7 @@ function validUuid(value: unknown) {
 }
 
 function legacyRole(record: AccessRecord) {
-  if (record.status === "blocked" || record.status === "revoked") return "blocked";
+  if (record.status !== "active" || record.biometric_status !== "active") return "blocked";
   switch (record.role) {
     case "owner": return "super_admin";
     case "master_admin": return "admin";
@@ -77,6 +77,10 @@ function legacyRole(record: AccessRecord) {
     case "auditor": return "auditor";
     default: return "blocked";
   }
+}
+
+function internalEmail(intranetUserId: string) {
+  return `intranet-${intranetUserId.toLowerCase()}@bnk.internal.invalid`;
 }
 
 Deno.serve(async (request: Request) => {
@@ -137,20 +141,25 @@ Deno.serve(async (request: Request) => {
     return (data ?? []) as AccessRecord[];
   }
 
-  async function findOrCreateShadowUser(email: string, fullName: string, intranetUserId: string | null) {
-    const { data: linked } = await admin.rpc("finance_access_get_by_identity", {
+  async function findOrCreateShadowUser(email: string, fullName: string, intranetUserId: string) {
+    const { data: linked, error: linkedError } = await admin.rpc("finance_access_get_by_identity", {
       p_intranet_user_id: intranetUserId,
       p_corporate_email: email
     });
+    if (linkedError) throw linkedError;
     const existingAccess = linked as AccessRecord | null;
     if (existingAccess?.finance_user_id) return existingAccess.finance_user_id;
 
+    const shadowEmail = internalEmail(intranetUserId);
     let page = 1;
     let existingUserId = "";
     while (page <= 10 && !existingUserId) {
       const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 100 });
       if (error) throw error;
-      const user = data.users.find((item) => item.email?.toLowerCase() === email);
+      const user = data.users.find((item) =>
+        item.email?.toLowerCase() === shadowEmail ||
+        item.user_metadata?.intranet_user_id === intranetUserId
+      );
       if (user) existingUserId = user.id;
       if (data.users.length < 100) break;
       page += 1;
@@ -158,15 +167,17 @@ Deno.serve(async (request: Request) => {
 
     if (!existingUserId) {
       const { data, error } = await admin.auth.admin.createUser({
-        email,
+        email: shadowEmail,
         email_confirm: true,
         user_metadata: {
           full_name: fullName || email,
+          corporate_email: email,
           identity_source: "intranet_step",
           intranet_user_id: intranetUserId
         },
         app_metadata: {
-          finance_shadow_identity: true
+          finance_shadow_identity: true,
+          standalone_login_allowed: false
         }
       });
       if (error || !data.user) throw error ?? new Error("Não foi possível criar a identidade financeira interna.");
@@ -175,7 +186,7 @@ Deno.serve(async (request: Request) => {
 
     const { error: profileError } = await admin.from("profiles").upsert({
       id: existingUserId,
-      email,
+      email: shadowEmail,
       full_name: fullName || email,
       status: "active",
       is_admin: false,
@@ -205,8 +216,9 @@ Deno.serve(async (request: Request) => {
 
       const email = normalizeEmail(body.corporate_email);
       const fullName = String(body.full_name ?? "").trim();
-      const intranetUserId = validUuid(body.intranet_user_id) ? String(body.intranet_user_id) : null;
+      const intranetUserId = validUuid(body.intranet_user_id) ? String(body.intranet_user_id) : "";
       if (!email.includes("@")) return json(request, { code: "INVALID_EMAIL", message: "Informe um e-mail corporativo válido." }, 400);
+      if (!intranetUserId) return json(request, { code: "INTRANET_USER_REQUIRED", message: "Selecione um usuário válido do Supabase principal da Intranet." }, 400);
 
       const targetUserId = await findOrCreateShadowUser(email, fullName, intranetUserId);
       const { data, error } = await admin.rpc("finance_assign_master", {
@@ -235,9 +247,10 @@ Deno.serve(async (request: Request) => {
 
       const email = normalizeEmail(body.corporate_email);
       const fullName = String(body.full_name ?? "").trim();
-      const intranetUserId = validUuid(body.intranet_user_id) ? String(body.intranet_user_id) : null;
+      const intranetUserId = validUuid(body.intranet_user_id) ? String(body.intranet_user_id) : "";
       const reason = String(body.reason ?? "").trim();
       if (!email.includes("@")) return json(request, { code: "INVALID_EMAIL", message: "Informe um e-mail corporativo válido." }, 400);
+      if (!intranetUserId) return json(request, { code: "INTRANET_USER_REQUIRED", message: "Selecione um usuário válido do Supabase principal da Intranet." }, 400);
 
       const targetUserId = await findOrCreateShadowUser(email, fullName, intranetUserId);
       const { data, error } = await admin.rpc("finance_grant_access", {
@@ -278,7 +291,7 @@ Deno.serve(async (request: Request) => {
   } catch (error) {
     console.error("finance-access-control", action, error);
     const message = error instanceof Error ? error.message : "Falha na administração financeira.";
-    const denied = /denied|owner|master|permission|42501/i.test(message);
+    const denied = /denied|owner|master|permission|42501|biometric/i.test(message);
     return json(request, {
       code: denied ? "FINANCE_ACCESS_OPERATION_DENIED" : "FINANCE_ACCESS_OPERATION_FAILED",
       message: denied ? "Operação não autorizada pela governança financeira." : "Não foi possível concluir a operação."
