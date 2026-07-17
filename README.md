@@ -1,36 +1,47 @@
 # STEP Finance Control
 
-Sistema financeiro separado da Intranet, preparado para funcionar como um cofre financeiro com:
+Módulo de Controle Bancário da STEP, preparado para rodar dentro da Intranet em `/financeiro/*`.
 
-- Supabase separado.
-- GitHub separado.
-- Netlify separado.
-- Login fechado por convite.
-- MFA/TOTP obrigatório via Authy, Google Authenticator ou Microsoft Authenticator.
-- Aprovação manual do primeiro dispositivo.
-- Perfis de acesso.
-- Row Level Security em todas as tabelas.
-- Logs de segurança e auditoria.
-- Formulário interno para alimentar o dashboard financeiro sem Open Finance.
-- Estrutura preparada para importação de arquivos e futura integração Open Finance.
+O acesso principal é feito pela Intranet STEP. O usuário não deve repetir login e senha: a Intranet valida a sessão corporativa, emite um ticket curto e o BNK mantém a segunda camada por token temporário de uso único.
 
-## Decisão recomendada de hospedagem
-
-Use **Netlify separado** para este projeto.
-
-A Intranet deve ter apenas um card de acesso que redireciona para o domínio do cofre financeiro. Assim, o financeiro fica isolado em infraestrutura, banco, deploy, variáveis e permissões.
-
-Modelo:
+## Modelo atual
 
 ```txt
 Intranet STEP
-  └── Card "Controle Financeiro"
-       └── redireciona para Netlify separado
-             └── STEP Finance Control
-                  └── Supabase financeiro separado
+  └── Financeiro > Controle Bancário
+       └── /api/auth/finance-launch
+            └── /financeiro/access
+                 └── token temporário BNK
+                      └── /financeiro/dashboard
 ```
 
-## Instalação local
+## Separação de segurança
+
+- Repositório BNK separado: `stepoil-debug/BNK`.
+- URL final dentro da Intranet: `/financeiro/*`.
+- Banco financeiro em schema isolado `finance_bnk` no Supabase da Intranet.
+- Dados financeiros não ficam misturados nas tabelas públicas da Intranet.
+- O navegador não acessa diretamente as tabelas do schema financeiro.
+- A segunda camada por token temporário permanece obrigatória.
+- Passkey/reconhecimento facial não é obrigatório neste fluxo.
+
+## Build do bundle
+
+O Vite está configurado com:
+
+```ts
+base: '/financeiro/'
+```
+
+E o React Router usa:
+
+```tsx
+<BrowserRouter basename="/financeiro">
+```
+
+Isso garante que os assets sejam gerados para `/financeiro/assets/...` e que as rotas internas funcionem dentro da URL da Intranet.
+
+## Desenvolvimento local
 
 ```bash
 npm install
@@ -38,41 +49,14 @@ cp .env.example .env
 npm run dev
 ```
 
-Preencha o `.env`:
+Preencha o `.env` apenas para desenvolvimento isolado do BNK:
 
 ```bash
 VITE_SUPABASE_URL=https://SEU-PROJETO.supabase.co
 VITE_SUPABASE_ANON_KEY=SUA_ANON_KEY
 ```
 
-## Banco Supabase
-
-1. Crie um projeto novo no Supabase.
-2. Execute o SQL em:
-
-```txt
-supabase/migrations/001_step_finance_control.sql
-```
-
-3. Crie seu usuário administrador no Supabase Auth.
-4. Depois de criar seu usuário, rode no SQL Editor:
-
-```sql
-update public.user_roles
-set role = 'super_admin'
-where user_id = '<SEU_USER_ID>';
-```
-
-## Fluxo de acesso
-
-1. E-mail e senha.
-2. Se o usuário ainda não configurou MFA, ele é obrigado a configurar.
-3. O sistema exibe QR Code para Authy/Google Authenticator/Microsoft Authenticator.
-4. O usuário valida o código de 6 dígitos.
-5. O dispositivo é identificado pelo navegador.
-6. Se for primeiro acesso, o dispositivo fica pendente.
-7. O Super Admin aprova ou bloqueia.
-8. Acesso ao dashboard é liberado.
+Em produção, o acesso oficial é controlado pelas funções da Intranet e pelo schema `finance_bnk`.
 
 ## Alimentação do dashboard
 
@@ -96,9 +80,10 @@ Os totais são calculados automaticamente. O usuário não digita total.
 
 ## Próximas etapas
 
+- Publicar novo artefato BNK validado para a Intranet.
+- Migrar posições financeiras antigas, caso o Supabase legado seja disponibilizado.
 - Importação Excel/CSV.
 - Importação OFX.
 - Leitura de PDF de fatura.
-- Passkey/WebAuthn ativada no frontend.
 - Exportação PDF do dashboard.
 - Integração Pluggy/Belvo em sandbox.
