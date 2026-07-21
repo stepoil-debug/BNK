@@ -6,7 +6,9 @@
   NODE_VERSION = "22"
   NPM_FLAGS = "--no-audit --no-fund"
 
+# A interface financeira oficial é entregue pelo STEP One no Cloudflare.
 [[redirects]]
   from = "/*"
-  to = "/index.html"
-  status = 200
+  to = "https://step-one.step-solutions.workers.dev/intranet/financeiro"
+  status = 301
+  force = true
