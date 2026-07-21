@@ -6,9 +6,9 @@
   NODE_VERSION = "22"
   NPM_FLAGS = "--no-audit --no-fund"
 
-# A interface financeira oficial é entregue pelo STEP One no Cloudflare.
+# A interface financeira oficial é entregue pelo STEP One no Netlify.
 [[redirects]]
   from = "/*"
-  to = "https://step-one.step-solutions.workers.dev/intranet/financeiro"
+  to = "https://intranet-step123.netlify.app/intranet/financeiro"
   status = 301
   force = true
