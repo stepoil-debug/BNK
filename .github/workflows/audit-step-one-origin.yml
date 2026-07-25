@@ -1,0 +1,43 @@
+name: Audit STEP One origin
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Scan tracked text files
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          old_hosts=('intranet-'+'step.netlify.app','intranetgerencial-'+'step.netlify.app')
+          excluded={'.github/workflows/audit-step-one-origin.yml','.step-one-origin-audit.tsv'}
+          rows=[]
+          for raw in subprocess.check_output(['git','ls-files','-z']).decode().split('\0'):
+              if not raw or raw in excluded: continue
+              p=Path(raw)
+              try: data=p.read_bytes()
+              except OSError: continue
+              if b'\0' in data or len(data)>8_000_000: continue
+              for n,line in enumerate(data.decode('utf-8',errors='ignore').splitlines(),1):
+                  for host in old_hosts:
+                      if host in line: rows.append(f'{raw}\t{n}\t{host}')
+          report='# file\tline\tlegacy_host\n'+('\n'.join(rows)+'\n' if rows else '# clean\n')
+          Path('.step-one-origin-audit.tsv').write_text(report,encoding='utf-8')
+          print(report)
+          PY
+      - name: Commit audit report
+        shell: bash
+        run: |
+          if git diff --quiet -- .step-one-origin-audit.tsv && git ls-files --error-unmatch .step-one-origin-audit.tsv >/dev/null 2>&1; then exit 0; fi
+          git config user.name 'STEP One origin auditor'
+          git config user.email 'actions@users.noreply.github.com'
+          git add .step-one-origin-audit.tsv
+          git commit -m 'chore: registrar auditoria de links STEP One [skip ci]'
+          git push
