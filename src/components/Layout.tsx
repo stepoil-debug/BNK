@@ -1,12 +1,16 @@
+import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
+  ArrowLeft,
   BarChart3,
   Bell,
-  Building2,
   CalendarDays,
   ChevronDown,
+  ChevronsLeft,
+  ChevronsRight,
   FileUp,
   History,
+  Home,
   LayoutDashboard,
   LogOut,
   Shield,
@@ -22,6 +26,11 @@ const navItems = [
   { to: '/security', label: 'Segurança', icon: Shield, adminOnly: true },
   { to: '/reports', label: 'Relatórios', icon: BarChart3 }
 ];
+
+const STEP_ONE_HOME = 'https://intranet-stepone.netlify.app/intranet';
+const STEP_ONE_FINANCE = 'https://intranet-stepone.netlify.app/intranet/financeiro';
+const STEP_ONE_LOGOUT = 'https://intranet-stepone.netlify.app/logout';
+const SIDEBAR_COLLAPSE_KEY = 'step.intranet.sidebar.collapsed';
 
 function monthLabel() {
   const label = new Date().toLocaleDateString('pt-BR', {
@@ -41,26 +50,60 @@ function initials(name?: string | null, email?: string | null) {
 export function Layout() {
   const { profile, role, isAdmin, signOut } = useAuth();
   const navigate = useNavigate();
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return window.localStorage.getItem(SIDEBAR_COLLAPSE_KEY) === '1'; }
+    catch { return false; }
+  });
+
+  function toggleCollapsed() {
+    setCollapsed(value => {
+      const next = !value;
+      try { window.localStorage.setItem(SIDEBAR_COLLAPSE_KEY, next ? '1' : '0'); }
+      catch { /* Mantém o estado durante a sessão atual. */ }
+      return next;
+    });
+  }
+
+  function goBack() {
+    const historyIndex = Number(window.history.state?.idx ?? 0);
+    if (historyIndex > 0 || window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    window.location.assign(STEP_ONE_FINANCE);
+  }
 
   async function handleLogout() {
     await signOut();
-    navigate('/login');
+    window.location.replace(STEP_ONE_LOGOUT);
   }
 
   return (
-    <div className="app-shell modern-shell">
-      <aside className="sidebar">
-        <div className="brand brand-card">
-          <img src="/logo-step.png" alt="STEP Integrated Solutions" />
+    <div className={`app-shell modern-shell ${collapsed ? 'finance-sidebar-collapsed' : ''}`}>
+      <aside className="sidebar step-finance-sidebar">
+        <div className="step-finance-brand-row">
+          <button className="brand step-finance-brand" type="button" onClick={() => window.location.assign(STEP_ONE_HOME)} aria-label="Início do STEP One" title="Início do STEP One">
+            <img src="/logo-step.png" alt="STEP One" />
+          </button>
+          <button className="step-finance-collapse" type="button" onClick={toggleCollapsed} aria-label={collapsed ? 'Expandir menu' : 'Recolher menu'} title={collapsed ? 'Expandir menu' : 'Recolher menu'}>
+            {collapsed ? <ChevronsRight /> : <ChevronsLeft />}
+          </button>
         </div>
 
+        <div className="step-finance-section-label">Módulo atual</div>
+        <button className="step-finance-current-module" type="button" onClick={() => navigate('/dashboard')} title="Financeiro">
+          <span className="step-finance-module-icon"><WalletCards /></span>
+          <span className="step-finance-module-copy"><strong>Financeiro</strong><small>Controle bancário</small></span>
+        </button>
+
+        <div className="step-finance-section-label">Navegação</div>
         <nav>
           {navItems
             .filter((item) => !item.adminOnly || isAdmin)
             .map((item) => {
               const Icon = item.icon;
               return (
-                <NavLink key={item.to} to={item.to} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                <NavLink key={item.to} to={item.to} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} title={item.label}>
                   <Icon size={19} />
                   <span>{item.label}</span>
                 </NavLink>
@@ -68,22 +111,10 @@ export function Layout() {
             })}
         </nav>
 
-        <div className="sidebar-note modern-note">
-          <Building2 size={22} />
-          <b>Cofre Financeiro STEP</b>
-          <p>
-            Dados protegidos, acesso controlado, importação manual e rastreabilidade completa das movimentações.
-          </p>
-          <small>Projeto separado, MFA obrigatório e dispositivos aprovados.</small>
-        </div>
-
-        <button className="logout" onClick={handleLogout}>
-          <LogOut size={18} /> Sair
-        </button>
-
-        <div className="sidebar-footer">
-          <span>© 2026 STEP Integrated Solutions</span>
-          <small>Versão 1.0.0</small>
+        <div className="step-finance-sidebar-footer">
+          <button type="button" onClick={goBack}><ArrowLeft /><span>Voltar</span></button>
+          <button type="button" onClick={() => window.location.assign(STEP_ONE_HOME)}><Home /><span>Voltar ao início</span></button>
+          <button type="button" onClick={() => void handleLogout()}><LogOut /><span>Sair</span></button>
         </div>
       </aside>
 
