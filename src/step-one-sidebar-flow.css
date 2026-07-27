@@ -1,0 +1,8 @@
+/* Fluxo vertical do menu conforme a referência de Orçamentos. */
+.step-finance-sidebar nav {
+  flex: 0 0 auto !important;
+}
+
+.step-finance-sidebar-footer {
+  flex: 0 0 auto !important;
+}
