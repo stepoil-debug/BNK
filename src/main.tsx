@@ -5,6 +5,7 @@ import App from './App';
 import { AuthProvider } from './context/AuthContext';
 import './styles.css';
 import './step-one-sidebar.css';
+import './step-one-sidebar-flow.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
