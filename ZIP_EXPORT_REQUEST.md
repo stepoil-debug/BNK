@@ -1,0 +1,1 @@
+Arquivo temporário para disparar o workflow de empacotamento do snapshot Lovable. Pode ser removido após a geração do ZIP.
