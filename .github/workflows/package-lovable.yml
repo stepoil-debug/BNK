@@ -8,6 +8,13 @@ on:
       - '.github/workflows/package-lovable.yml'
       - 'LOVABLE_PROMPT.md'
       - 'LOVABLE_EXTRACTION_MANIFEST.md'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/package-lovable.yml'
+      - 'LOVABLE_PROMPT.md'
+      - 'LOVABLE_EXTRACTION_MANIFEST.md'
   workflow_dispatch:
 
 permissions:
