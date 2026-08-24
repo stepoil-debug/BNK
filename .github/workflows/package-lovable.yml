@@ -1,0 +1,36 @@
+name: Package Lovable Replica
+
+on:
+  push:
+    branches:
+      - lovable-replica-2026-08-24
+    paths:
+      - '.github/workflows/package-lovable.yml'
+      - 'LOVABLE_PROMPT.md'
+      - 'LOVABLE_EXTRACTION_MANIFEST.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout replica branch
+        uses: actions/checkout@v4
+
+      - name: Build complete ZIP
+        run: |
+          mkdir -p package/STEP_Financeiro_Lovable
+          rsync -a --exclude='.git' --exclude='package' ./ package/STEP_Financeiro_Lovable/
+          cd package
+          zip -r STEP_Financeiro_Lovable.zip STEP_Financeiro_Lovable
+
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: STEP_Financeiro_Lovable
+          path: package/STEP_Financeiro_Lovable.zip
+          if-no-files-found: error
+          retention-days: 7
