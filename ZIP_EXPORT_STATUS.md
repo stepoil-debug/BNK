@@ -1,0 +1,1 @@
+Packaging workflow trigger context for complete Lovable replica ZIP.
